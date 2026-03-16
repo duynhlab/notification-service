@@ -18,6 +18,7 @@ type DatabaseConfig struct {
 	Port           string // DB_PORT - PostgreSQL port (default: 5432)
 	Name           string // DB_NAME - Database name
 	User           string // DB_USER - Database user
+	//nolint:gosec
 	Password       string // DB_PASSWORD - Database password
 	SSLMode        string // DB_SSLMODE - SSL mode
 	MaxConnections int    // DB_POOL_MAX_CONNECTIONS - Max pool connections

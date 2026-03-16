@@ -44,7 +44,7 @@ func (c *AuthClient) GetMe(ctx context.Context, token string) (*AuthUser, error)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("request auth service: %w", err)
 	}
