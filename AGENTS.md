@@ -25,13 +25,29 @@ notification-service/
 
 ## 🔌 API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/notifications` | Get all notifications |
-| `GET` | `/api/v1/notifications/:id` | Get notification by ID |
-| `PATCH` | `/api/v1/notifications/:id` | Mark as read |
-| `POST` | `/api/v1/notify/email` | Send email (internal) |
-| `POST` | `/api/v1/notify/sms` | Send SMS (internal) |
+### Cluster paths (what this service mounts)
+
+| Method | Cluster path | Audience | Description |
+|--------|--------------|----------|-------------|
+| `GET` | `/api/v1/notifications` | private | Get all notifications for the current user |
+| `GET` | `/api/v1/notifications/count` | private | Unread count (badge poll) |
+| `GET` | `/api/v1/notifications/:id` | private | Get notification by ID |
+| `PATCH` | `/api/v1/notifications/:id` | private | Mark as read |
+| `POST` | `/api/v1/notify/email` | internal | Send email — **in-cluster only, not on gateway** |
+| `POST` | `/api/v1/notify/sms` | internal | Send SMS — **in-cluster only, not on gateway** |
+
+### Edge paths (what the browser sends)
+
+Kong in the `notification` namespace rewrites `/notification/v1/private/notifications/...` → `/api/v1/notifications/...`. The `notify/*` internal routes are deliberately not exposed; other services call them via `http://notification.notification.svc.cluster.local:8080/api/v1/notify/{email,sms}`.
+
+| Edge path (browser) | → Cluster path |
+|---------------------|----------------|
+| `GET gateway.duynhne.me/notification/v1/private/notifications` | `GET /api/v1/notifications` |
+| `GET gateway.duynhne.me/notification/v1/private/notifications/count` | `GET /api/v1/notifications/count` |
+| `GET \| PATCH gateway.duynhne.me/notification/v1/private/notifications/:id` | `/api/v1/notifications/:id` |
+| *(no edge path)* | `POST /api/v1/notify/{email,sms}` — internal only |
+
+Convention + rewrite rule: [`homelab/docs/api/api-naming-convention.md`](https://github.com/duynhlab/homelab/blob/main/docs/api/api-naming-convention.md).
 
 ## 📐 3-Layer Architecture
 
