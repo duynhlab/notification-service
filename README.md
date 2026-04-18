@@ -11,14 +11,16 @@ Notification microservice for email, SMS, and in-app notifications.
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/notifications` | Get all |
-| `GET` | `/api/v1/notifications/count` | Get unread count |
-| `GET` | `/api/v1/notifications/:id` | Get by ID |
-| `PATCH` | `/api/v1/notifications/:id` | Mark as read |
-| `POST` | `/api/v1/notify/email` | Send email |
-| `POST` | `/api/v1/notify/sms` | Send SMS |
+All routes follow Variant A naming — single path for browser and in-cluster callers. See [homelab naming convention](https://github.com/duynhlab/homelab/blob/main/docs/api/api-naming-convention.md).
+
+| Method | Path | Audience |
+|--------|------|----------|
+| `GET` | `/notification/v1/private/notifications` | private |
+| `GET` | `/notification/v1/private/notifications/count` | private |
+| `GET` | `/notification/v1/private/notifications/:id` | private |
+| `PATCH` | `/notification/v1/private/notifications/:id` | private |
+| `POST` | `/notification/v1/internal/notify/email` | internal (in-cluster only) |
+| `POST` | `/notification/v1/internal/notify/sms` | internal (in-cluster only) |
 
 ## Tech Stack
 

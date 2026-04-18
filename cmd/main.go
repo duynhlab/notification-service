@@ -118,22 +118,23 @@ func setupServer(
 	})
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Public (Authenticated) Routes
-	authV1 := r.Group("/api/v1")
-	authV1.Use(middleware.AuthMiddleware(authClient))
+	// Notification v1 routes — Variant A edge naming (see api-naming-convention.md)
+
+	// Private: user-facing notification list/count/detail/mark-read (JWT required)
+	privateNotif := r.Group("/notification/v1/private")
+	privateNotif.Use(middleware.AuthMiddleware(authClient))
 	{
-		authV1.GET("/notifications", handler.ListNotifications)
-		authV1.GET("/notifications/count", handler.GetUnreadCount)
-		authV1.GET("/notifications/:id", handler.GetNotification)
-		authV1.PATCH("/notifications/:id", handler.MarkAsRead)
+		privateNotif.GET("/notifications", handler.ListNotifications)
+		privateNotif.GET("/notifications/count", handler.GetUnreadCount)
+		privateNotif.GET("/notifications/:id", handler.GetNotification)
+		privateNotif.PATCH("/notifications/:id", handler.MarkAsRead)
 	}
 
-	// Internal Service-to-Service Routes (No User Auth)
-	// These endpoints are called by other services (e.g., order-service triggers email)
-	internalV1 := r.Group("/api/v1")
+	// Internal: service-to-service (e.g. order-service triggers email). Not on gateway.
+	internalNotif := r.Group("/notification/v1/internal")
 	{
-		internalV1.POST("/notify/email", handler.SendEmail)
-		internalV1.POST("/notify/sms", handler.SendSMS)
+		internalNotif.POST("/notify/email", handler.SendEmail)
+		internalNotif.POST("/notify/sms", handler.SendSMS)
 	}
 
 	return &http.Server{

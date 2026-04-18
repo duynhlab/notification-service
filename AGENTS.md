@@ -25,13 +25,18 @@ notification-service/
 
 ## 🔌 API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/v1/notifications` | Get all notifications |
-| `GET` | `/api/v1/notifications/:id` | Get notification by ID |
-| `PATCH` | `/api/v1/notifications/:id` | Mark as read |
-| `POST` | `/api/v1/notify/email` | Send email (internal) |
-| `POST` | `/api/v1/notify/sms` | Send SMS (internal) |
+Routes are mounted directly at `/{service}/v1/{audience}/…` (Variant A — single URL shape). Kong is pure pass-through for `private`; `internal` is reachable only via service DNS.
+
+| Method | Path | Audience | Description |
+|--------|------|----------|-------------|
+| `GET` | `/notification/v1/private/notifications` | private | Get all notifications for the current user |
+| `GET` | `/notification/v1/private/notifications/count` | private | Unread count (badge poll) |
+| `GET` | `/notification/v1/private/notifications/:id` | private | Get notification by ID |
+| `PATCH` | `/notification/v1/private/notifications/:id` | private | Mark as read |
+| `POST` | `/notification/v1/internal/notify/email` | internal | Send email — called by other services via `http://notification.notification.svc.cluster.local:8080` |
+| `POST` | `/notification/v1/internal/notify/sms` | internal | Send SMS — same (in-cluster only) |
+
+Full convention + inventory: [`homelab/docs/api/api-naming-convention.md`](https://github.com/duynhlab/homelab/blob/main/docs/api/api-naming-convention.md).
 
 ## 📐 3-Layer Architecture
 

@@ -94,7 +94,7 @@ func (h *Handler) SendSMS(c *gin.Context) {
 	c.JSON(http.StatusOK, notification)
 }
 
-// ListNotifications handles GET /api/v1/notifications
+// ListNotifications handles GET /notification/v1/private/notifications
 func (h *Handler) ListNotifications(c *gin.Context) {
 	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
 		attribute.String("layer", "web"),
@@ -161,17 +161,17 @@ func (h *Handler) handleNotificationByID(
 	c.JSON(http.StatusOK, notification)
 }
 
-// GetNotification handles GET /api/v1/notifications/:id
+// GetNotification handles GET /notification/v1/private/notifications/:id
 func (h *Handler) GetNotification(c *gin.Context) {
 	h.handleNotificationByID(c, h.service.GetNotification, "Notification retrieved")
 }
 
-// MarkAsRead handles PATCH /api/v1/notifications/:id
+// MarkAsRead handles PATCH /notification/v1/private/notifications/:id
 func (h *Handler) MarkAsRead(c *gin.Context) {
 	h.handleNotificationByID(c, h.service.MarkAsRead, "Notification marked as read")
 }
 
-// GetUnreadCount handles GET /api/v1/notifications/count
+// GetUnreadCount handles GET /notification/v1/private/notifications/count
 func (h *Handler) GetUnreadCount(c *gin.Context) {
 	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
 		attribute.String("layer", "web"),
