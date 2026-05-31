@@ -12,6 +12,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// errInvalidUserID is the error format used when the user id cannot be parsed.
+const errInvalidUserID = "invalid user_id: %s"
+
 type NotificationService struct {
 	repo domain.NotificationRepository
 }
@@ -91,8 +94,8 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf("invalid user_id: %s", userID))
-		return nil, fmt.Errorf("invalid user_id: %s", userID)
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return nil, fmt.Errorf(errInvalidUserID, userID)
 	}
 
 	notifications, err := s.repo.ListByUserID(ctx, uid)
@@ -126,8 +129,8 @@ func (s *NotificationService) GetNotification(ctx context.Context, id, userID st
 
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf("invalid user_id: %s", userID))
-		return nil, fmt.Errorf("invalid user_id: %s", userID)
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return nil, fmt.Errorf(errInvalidUserID, userID)
 	}
 
 	notification, err := s.repo.FindByID(ctx, notificationID, uid)
@@ -162,8 +165,8 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf("invalid user_id: %s", userID))
-		return nil, fmt.Errorf("invalid user_id: %s", userID)
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return nil, fmt.Errorf(errInvalidUserID, userID)
 	}
 
 	updated, err := s.repo.MarkAsRead(ctx, notificationID, uid)
@@ -196,8 +199,8 @@ func (s *NotificationService) CountUnread(ctx context.Context, userID string) (i
 	}
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf("invalid user_id: %s", userID))
-		return 0, fmt.Errorf("invalid user_id: %s", userID)
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return 0, fmt.Errorf(errInvalidUserID, userID)
 	}
 
 	// Use repository for database access (proper 3-layer architecture)

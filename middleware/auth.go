@@ -13,6 +13,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// errAuthRequired is the 401 response message when authentication fails.
+const errAuthRequired = "Authentication required"
+
 // AuthUser represents the user info returned from auth service
 type AuthUser struct {
 	ID       string `json:"id"`
@@ -73,7 +76,7 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		// Get token from Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 			return
 		}
 
@@ -82,7 +85,7 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		if len(authHeader) <= len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
 			logger := GetLoggerFromGinContext(c)
 			logger.Warn("Malformed Authorization header", zap.String("header", authHeader))
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 			return
 		}
 		token := authHeader[len(bearerPrefix):]
@@ -92,7 +95,7 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		if err != nil {
 			logger := GetLoggerFromGinContext(c)
 			logger.Warn("Auth validation failed", zap.Error(err))
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 			return
 		}
 

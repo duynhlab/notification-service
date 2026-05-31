@@ -14,6 +14,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// attrAuthMissing is the span attribute set when no authenticated user is present.
+	attrAuthMissing = "auth.missing"
+	// logMsgMissingUserID is logged when user_id is absent from the request context.
+	logMsgMissingUserID = "Missing user_id in request context"
+	// errAuthRequired is the response message when a request lacks a valid user.
+	errAuthRequired = "Authentication required"
+)
+
 type Handler struct {
 	service *logicv1.NotificationService
 }
@@ -109,9 +118,9 @@ func (h *Handler) ListNotifications(c *gin.Context) {
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
-		span.SetAttributes(attribute.Bool("auth.missing", true))
-		zapLogger.Warn("Missing user_id in request context")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
+		zapLogger.Warn(logMsgMissingUserID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 		return
 	}
 
@@ -147,9 +156,9 @@ func (h *Handler) handleNotificationByID(
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
-		span.SetAttributes(attribute.Bool("auth.missing", true))
-		zapLogger.Warn("Missing user_id in request context")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
+		zapLogger.Warn(logMsgMissingUserID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 		return
 	}
 
@@ -199,9 +208,9 @@ func (h *Handler) GetUnreadCount(c *gin.Context) {
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
-		span.SetAttributes(attribute.Bool("auth.missing", true))
-		zapLogger.Warn("Missing user_id in request context")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
+		zapLogger.Warn(logMsgMissingUserID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 		return
 	}
 
