@@ -12,6 +12,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// errInvalidUserID is the error format used when the user id cannot be parsed.
+const errInvalidUserID = "invalid user_id: %s"
+
 type NotificationService struct {
 	repo domain.NotificationRepository
 }
@@ -35,10 +38,6 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 		return nil, fmt.Errorf("send email to %q: %w", req.To, ErrInvalidRecipient)
 	}
 
-	// TODO: Extract user_id from email or JWT token
-	// For now, use mock user_id = 1
-	userID := 1
-
 	notification := &domain.Notification{
 		Type:    "email",
 		Message: req.Subject, // Using subject as message/title
@@ -46,7 +45,7 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 	}
 
 	// Insert using repository
-	err := s.repo.Create(ctx, notification, userID)
+	err := s.repo.Create(ctx, notification, req.UserID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("create notification: %w", err)
@@ -65,9 +64,6 @@ func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSReq
 	))
 	defer span.End()
 
-	// TODO: Extract user_id from phone number or JWT token
-	userID := 1
-
 	notification := &domain.Notification{
 		Type:    "sms",
 		Message: req.Message,
@@ -75,7 +71,7 @@ func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSReq
 	}
 
 	// Insert using repository
-	err := s.repo.Create(ctx, notification, userID)
+	err := s.repo.Create(ctx, notification, req.UserID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("create notification: %w", err)
@@ -96,12 +92,10 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 	))
 	defer span.End()
 
-	// Use provided userID or default to "1"
-	uid := 1
-	if userID != "" {
-		if parsed, err := strconv.Atoi(userID); err == nil {
-			uid = parsed
-		}
+	uid, err := strconv.Atoi(userID)
+	if err != nil || uid <= 0 {
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return nil, fmt.Errorf(errInvalidUserID, userID)
 	}
 
 	notifications, err := s.repo.ListByUserID(ctx, uid)
@@ -117,12 +111,13 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 	return notifications, nil
 }
 
-// GetNotification retrieves a single notification by ID
-func (s *NotificationService) GetNotification(ctx context.Context, id string) (*domain.Notification, error) {
+// GetNotification retrieves a single notification by ID, scoped to the owning user.
+func (s *NotificationService) GetNotification(ctx context.Context, id, userID string) (*domain.Notification, error) {
 	ctx, span := middleware.StartSpan(ctx, "notification.get", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("notification.id", id),
+		attribute.String("user_id", userID),
 	))
 	defer span.End()
 
@@ -132,7 +127,13 @@ func (s *NotificationService) GetNotification(ctx context.Context, id string) (*
 		return nil, fmt.Errorf("invalid notification id %q: %w", id, ErrNotificationNotFound)
 	}
 
-	notification, err := s.repo.FindByID(ctx, notificationID)
+	uid, err := strconv.Atoi(userID)
+	if err != nil || uid <= 0 {
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return nil, fmt.Errorf(errInvalidUserID, userID)
+	}
+
+	notification, err := s.repo.FindByID(ctx, notificationID, uid)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -147,12 +148,13 @@ func (s *NotificationService) GetNotification(ctx context.Context, id string) (*
 	return notification, nil
 }
 
-// MarkAsRead marks a notification as read
-func (s *NotificationService) MarkAsRead(ctx context.Context, id string) (*domain.Notification, error) {
+// MarkAsRead marks a notification as read, scoped to the owning user.
+func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string) (*domain.Notification, error) {
 	ctx, span := middleware.StartSpan(ctx, "notification.mark_read", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("notification.id", id),
+		attribute.String("user_id", userID),
 	))
 	defer span.End()
 
@@ -161,21 +163,25 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id string) (*domai
 		return nil, fmt.Errorf("invalid notification id %q: %w", id, ErrNotificationNotFound)
 	}
 
-	updated, err := s.repo.MarkAsRead(ctx, notificationID)
+	uid, err := strconv.Atoi(userID)
+	if err != nil || uid <= 0 {
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return nil, fmt.Errorf(errInvalidUserID, userID)
+	}
+
+	updated, err := s.repo.MarkAsRead(ctx, notificationID, uid)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
 	}
 
 	if !updated {
-		// Either didn't exist or was already read (though logic suggests existence check)
-		// For now, treat as not found or nothing to update
-		// To match previous logic, check if it exists or generic not found
+		// Row did not exist or is not owned by this user — do not leak existence.
 		return nil, fmt.Errorf("notification id %q: %w", id, ErrNotificationNotFound)
 	}
 
 	// Return updated notification
-	return s.GetNotification(ctx, id)
+	return s.GetNotification(ctx, id, userID)
 }
 
 // CountUnread returns unread notification count for a user
@@ -193,8 +199,8 @@ func (s *NotificationService) CountUnread(ctx context.Context, userID string) (i
 	}
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf("invalid user_id: %s", userID))
-		return 0, fmt.Errorf("invalid user_id: %s", userID)
+		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
+		return 0, fmt.Errorf(errInvalidUserID, userID)
 	}
 
 	// Use repository for database access (proper 3-layer architecture)

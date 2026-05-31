@@ -14,6 +14,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// attrAuthMissing is the span attribute set when no authenticated user is present.
+	attrAuthMissing = "auth.missing"
+	// logMsgMissingUserID is logged when user_id is absent from the request context.
+	logMsgMissingUserID = "Missing user_id in request context"
+	// errAuthRequired is the response message when a request lacks a valid user.
+	errAuthRequired = "Authentication required"
+)
+
 type Handler struct {
 	service *logicv1.NotificationService
 }
@@ -37,7 +46,7 @@ func (h *Handler) SendEmail(c *gin.Context) {
 		span.SetAttributes(attribute.Bool("request.valid", false))
 		span.RecordError(err)
 		zapLogger.Error("Invalid request", zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -77,7 +86,7 @@ func (h *Handler) SendSMS(c *gin.Context) {
 		span.SetAttributes(attribute.Bool("request.valid", false))
 		span.RecordError(err)
 		zapLogger.Error("Invalid request", zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -106,10 +115,13 @@ func (h *Handler) ListNotifications(c *gin.Context) {
 
 	zapLogger := middleware.GetLoggerFromGinContext(c)
 
-	// Get user_id from auth middleware (falls back to "1" for demo)
+	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
-		userID = "1"
+		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
+		zapLogger.Warn(logMsgMissingUserID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
+		return
 	}
 
 	notifications, err := h.service.ListNotifications(ctx, userID)
@@ -128,7 +140,7 @@ func (h *Handler) ListNotifications(c *gin.Context) {
 // It extracts common boilerplate (span setup, ID extraction, error handling) to avoid duplication.
 func (h *Handler) handleNotificationByID(
 	c *gin.Context,
-	action func(ctx context.Context, id string) (*domain.Notification, error),
+	action func(ctx context.Context, id, userID string) (*domain.Notification, error),
 	successLog string,
 ) {
 	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
@@ -140,10 +152,20 @@ func (h *Handler) handleNotificationByID(
 	defer span.End()
 
 	zapLogger := middleware.GetLoggerFromGinContext(c)
+
+	// Security: Require valid user_id from auth middleware
+	userID := c.GetString("user_id")
+	if userID == "" {
+		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
+		zapLogger.Warn(logMsgMissingUserID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
+		return
+	}
+
 	id := c.Param("id")
 	span.SetAttributes(attribute.String("notification.id", id))
 
-	notification, err := action(ctx, id)
+	notification, err := action(ctx, id, userID)
 	if err != nil {
 		span.RecordError(err)
 		zapLogger.Error(successLog+" failed", zap.Error(err))
@@ -186,9 +208,9 @@ func (h *Handler) GetUnreadCount(c *gin.Context) {
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
-		span.SetAttributes(attribute.Bool("auth.missing", true))
-		zapLogger.Warn("Missing user_id in request context")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
+		zapLogger.Warn(logMsgMissingUserID)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 		return
 	}
 

@@ -60,7 +60,7 @@ func main() {
 	authClient := middleware.NewAuthClient(cfg.AuthServiceURL)
 
 	var isShuttingDown atomic.Bool
-	srv := setupServer(cfg, logger, &isShuttingDown, handler, authClient)
+	srv := setupServer(cfg, logger, &isShuttingDown, handler, authClient, pool)
 	runGracefulShutdown(cfg, srv, tp, pool, logger, &isShuttingDown)
 }
 
@@ -99,6 +99,9 @@ func setupServer(
 	isShuttingDown *atomic.Bool,
 	handler *webv1.Handler,
 	authClient *middleware.AuthClient,
+	pool interface {
+		Ping(context.Context) error
+	},
 ) *http.Server {
 	r := gin.Default()
 
@@ -112,6 +115,12 @@ func setupServer(
 	r.GET("/ready", func(c *gin.Context) {
 		if isShuttingDown.Load() {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "shutting_down"})
+			return
+		}
+		pingCtx, cancel := context.WithTimeout(c.Request.Context(), 1*time.Second)
+		defer cancel()
+		if err := pool.Ping(pingCtx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "db_unavailable"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
