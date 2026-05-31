@@ -73,10 +73,7 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		// Get token from Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			// No token provided - allow request with default user_id for demo compatibility
-			// In production, you'd return 401 here
-			c.Set("user_id", "1")
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 			return
 		}
 
@@ -85,8 +82,7 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		if len(authHeader) <= len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
 			logger := GetLoggerFromGinContext(c)
 			logger.Warn("Malformed Authorization header", zap.String("header", authHeader))
-			c.Set("user_id", "1")
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 			return
 		}
 		token := authHeader[len(bearerPrefix):]
@@ -96,11 +92,7 @@ func AuthMiddleware(authClient *AuthClient) gin.HandlerFunc {
 		if err != nil {
 			logger := GetLoggerFromGinContext(c)
 			logger.Warn("Auth validation failed", zap.Error(err))
-
-			// For demo compatibility, fall back to default user_id
-			// In production: c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Set("user_id", "1")
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 			return
 		}
 

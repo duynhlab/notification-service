@@ -4,9 +4,9 @@ import "context"
 
 type NotificationRepository interface {
 	Create(ctx context.Context, notification *Notification, userID int) error
-	FindByID(ctx context.Context, id int) (*Notification, error)
+	FindByID(ctx context.Context, id, userID int) (*Notification, error)
 	ListByUserID(ctx context.Context, userID int) ([]Notification, error)
-	MarkAsRead(ctx context.Context, id int) (bool, error)
+	MarkAsRead(ctx context.Context, id, userID int) (bool, error)
 	CountUnreadByUserID(ctx context.Context, userID int) (int, error)
 }
 
@@ -21,12 +21,14 @@ type Notification struct {
 }
 
 type SendEmailRequest struct {
+	UserID  int    `json:"user_id" binding:"required"`
 	To      string `json:"to" binding:"required,email"`
 	Subject string `json:"subject" binding:"required"`
 	Body    string `json:"body" binding:"required"`
 }
 
 type SendSMSRequest struct {
+	UserID  int    `json:"user_id" binding:"required"`
 	To      string `json:"to" binding:"required"`
 	Message string `json:"message" binding:"required"`
 }

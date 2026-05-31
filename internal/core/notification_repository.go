@@ -70,20 +70,20 @@ func (r *NotificationRepository) Create(ctx context.Context, notification *domai
 	return nil
 }
 
-// FindByID retrieves a notification by its ID.
-func (r *NotificationRepository) FindByID(ctx context.Context, id int) (*domain.Notification, error) {
+// FindByID retrieves a notification by its ID, scoped to the owning user.
+func (r *NotificationRepository) FindByID(ctx context.Context, id, userID int) (*domain.Notification, error) {
 	db := GetPool()
 	if db == nil {
 		return nil, errors.New("database connection not available")
 	}
 
-	query := `SELECT id, user_id, title, message, type, read, created_at FROM notifications WHERE id = $1`
-	var notificationID, userID int
+	query := `SELECT id, user_id, title, message, type, read, created_at FROM notifications WHERE id = $1 AND user_id = $2`
+	var notificationID, ownerID int
 	var title, message, notifType *string
 	var read bool
 	var createdAt time.Time
 
-	err := db.QueryRow(ctx, query, id).Scan(&notificationID, &userID, &title, &message, &notifType, &read, &createdAt)
+	err := db.QueryRow(ctx, query, id, userID).Scan(&notificationID, &ownerID, &title, &message, &notifType, &read, &createdAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil // Return nil if not found, let caller handle specific error
@@ -176,15 +176,16 @@ func (r *NotificationRepository) ListByUserID(ctx context.Context, userID int) (
 	return notifications, nil
 }
 
-// MarkAsRead marks a notification as read. Returns true if updated, false if not found.
-func (r *NotificationRepository) MarkAsRead(ctx context.Context, id int) (bool, error) {
+// MarkAsRead marks a notification as read, scoped to the owning user.
+// Returns true if updated, false if not found (or not owned by the user).
+func (r *NotificationRepository) MarkAsRead(ctx context.Context, id, userID int) (bool, error) {
 	db := GetPool()
 	if db == nil {
 		return false, errors.New("database connection not available")
 	}
 
-	query := `UPDATE notifications SET read = true WHERE id = $1`
-	result, err := db.Exec(ctx, query, id)
+	query := `UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2`
+	result, err := db.Exec(ctx, query, id, userID)
 	if err != nil {
 		return false, fmt.Errorf("update notification: %w", err)
 	}
