@@ -9,7 +9,7 @@
 //
 // Usage:
 //
-//	import "github.com/duynhne/notification-service/config"
+//	import "github.com/duynhlab/notification-service/config"
 //
 //	func main() {
 //	    cfg := config.Load()
