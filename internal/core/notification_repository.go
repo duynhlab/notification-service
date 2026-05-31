@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/duynhne/notification-service/internal/core/domain"
+	"github.com/duynhlab/notification-service/internal/core/domain"
 	"github.com/jackc/pgx/v5"
 )
 

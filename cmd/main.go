@@ -13,14 +13,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
-	"github.com/duynhne/notification-service/config"
-	database "github.com/duynhne/notification-service/internal/core"
-	logicv1 "github.com/duynhne/notification-service/internal/logic/v1"
-	webv1 "github.com/duynhne/notification-service/internal/web/v1"
-	"github.com/duynhne/notification-service/middleware"
-	"github.com/duynhne/pkg/authmw"
-	"github.com/duynhne/pkg/grpcx"
-	authv1 "github.com/duynhne/pkg/proto/auth/v1"
+	"github.com/duynhlab/notification-service/config"
+	database "github.com/duynhlab/notification-service/internal/core"
+	logicv1 "github.com/duynhlab/notification-service/internal/logic/v1"
+	webv1 "github.com/duynhlab/notification-service/internal/web/v1"
+	"github.com/duynhlab/notification-service/middleware"
+	"github.com/duynhlab/pkg/authmw"
+	"github.com/duynhlab/pkg/grpcx"
+	authv1 "github.com/duynhlab/pkg/proto/auth/v1"
 )
 
 func main() {

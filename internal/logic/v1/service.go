@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/duynhne/notification-service/internal/core/domain"
-	"github.com/duynhne/notification-service/middleware"
+	"github.com/duynhlab/notification-service/internal/core/domain"
+	"github.com/duynhlab/notification-service/middleware"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )

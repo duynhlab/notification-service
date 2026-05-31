@@ -5,9 +5,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/duynhne/notification-service/internal/core/domain"
-	logicv1 "github.com/duynhne/notification-service/internal/logic/v1"
-	"github.com/duynhne/notification-service/middleware"
+	"github.com/duynhlab/notification-service/internal/core/domain"
+	logicv1 "github.com/duynhlab/notification-service/internal/logic/v1"
+	"github.com/duynhlab/notification-service/middleware"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
