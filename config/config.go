@@ -42,7 +42,7 @@ type Config struct {
 	Logging         LoggingConfig   // Structured logging (Zap)
 	Metrics         MetricsConfig   // Prometheus metrics
 	Database        DatabaseConfig  // PostgreSQL database configuration
-	AuthServiceURL  string          // URL of the auth service - from AUTH_SERVICE_URL env
+	AuthGRPCAddr    string          // Auth service gRPC target for token validation - from AUTH_GRPC_ADDR env
 	ShutdownTimeout int             // Graceful shutdown timeout in seconds - from SHUTDOWN_TIMEOUT env (default: 10)
 	// ReadinessDrainDelay: delay after failing readiness before shutting down the HTTP server.
 	// This gives Kubernetes/Service routing time to stop sending new traffic.
@@ -90,10 +90,10 @@ type MetricsConfig struct {
 // DatabaseConfig defines PostgreSQL database configuration
 // All database connections use separate environment variables (not DATABASE_URL string)
 type DatabaseConfig struct {
-	Host           string // Database host - from DB_HOST env
-	Port           string // Database port - from DB_PORT env (default: "5432")
-	Name           string // Database name - from DB_NAME env
-	User           string // Database user - from DB_USER env
+	Host string // Database host - from DB_HOST env
+	Port string // Database port - from DB_PORT env (default: "5432")
+	Name string // Database name - from DB_NAME env
+	User string // Database user - from DB_USER env
 	//nolint:gosec
 	Password       string // Database password - from DB_PASSWORD env
 	SSLMode        string // SSL mode - from DB_SSLMODE env (default: "disable")
@@ -158,7 +158,7 @@ func Load() *Config {
 			PoolMode:       getEnv("DB_POOL_MODE", ""),
 			PoolerType:     getEnv("DB_POOLER_TYPE", ""),
 		},
-		AuthServiceURL:      getEnv("AUTH_SERVICE_URL", "http://auth-service:8080"),
+		AuthGRPCAddr:        getEnv("AUTH_GRPC_ADDR", "dns:///auth.auth.svc.cluster.local:9090"),
 		ShutdownTimeout:     getEnvDurationSeconds("SHUTDOWN_TIMEOUT", 10),
 		ReadinessDrainDelay: getEnvDurationSecondsWithMax("READINESS_DRAIN_DELAY", 5, 30),
 	}
@@ -174,7 +174,6 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateProfiling()...)
 	errs = append(errs, c.validateLogging()...)
 	errs = append(errs, c.validateDatabase()...)
-	errs = append(errs, c.validateAuth()...)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("configuration validation failed:\n  - %s", strings.Join(errs, "\n  - "))
@@ -263,14 +262,6 @@ func (c *Config) validateDatabase() []string {
 		if _, err := strconv.Atoi(c.Database.Port); err != nil {
 			errs = append(errs, "DB_PORT must be a valid number, got: "+c.Database.Port)
 		}
-	}
-	return errs
-}
-
-func (c *Config) validateAuth() []string {
-	var errs []string
-	if c.AuthServiceURL == "" {
-		errs = append(errs, "AUTH_SERVICE_URL is required")
 	}
 	return errs
 }

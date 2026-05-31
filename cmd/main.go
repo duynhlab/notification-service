@@ -18,6 +18,9 @@ import (
 	logicv1 "github.com/duynhne/notification-service/internal/logic/v1"
 	webv1 "github.com/duynhne/notification-service/internal/web/v1"
 	"github.com/duynhne/notification-service/middleware"
+	"github.com/duynhne/pkg/authmw"
+	"github.com/duynhne/pkg/grpcx"
+	authv1 "github.com/duynhne/pkg/proto/auth/v1"
 )
 
 func main() {
@@ -56,8 +59,15 @@ func main() {
 	service := logicv1.NewNotificationService(repo)
 	handler := webv1.NewHandler(service)
 
-	// Auth Client
-	authClient := middleware.NewAuthClient(cfg.AuthServiceURL)
+	// Validate tokens against auth over gRPC (shared fail-closed authmw).
+	authConn, err := grpcx.Dial(cfg.AuthGRPCAddr)
+	if err != nil {
+		logger.Error("Failed to dial auth gRPC", zap.String("addr", cfg.AuthGRPCAddr), zap.Error(err))
+		return
+	}
+	defer func() { _ = authConn.Close() }()
+	authClient := authv1.NewAuthServiceClient(authConn)
+	logger.Info("Auth gRPC client initialized", zap.String("auth_grpc_addr", cfg.AuthGRPCAddr))
 
 	var isShuttingDown atomic.Bool
 	srv := setupServer(cfg, logger, &isShuttingDown, handler, authClient, pool)
@@ -98,7 +108,7 @@ func setupServer(
 	logger *zap.Logger,
 	isShuttingDown *atomic.Bool,
 	handler *webv1.Handler,
-	authClient *middleware.AuthClient,
+	authClient authv1.AuthServiceClient,
 	pool interface {
 		Ping(context.Context) error
 	},
@@ -131,7 +141,7 @@ func setupServer(
 
 	// Private: user-facing notification list/count/detail/mark-read (JWT required)
 	privateNotif := r.Group("/notification/v1/private")
-	privateNotif.Use(middleware.AuthMiddleware(authClient))
+	privateNotif.Use(authmw.Middleware(authClient))
 	{
 		privateNotif.GET("/notifications", handler.ListNotifications)
 		privateNotif.GET("/notifications/count", handler.GetUnreadCount)
