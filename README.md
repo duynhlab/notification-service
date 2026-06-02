@@ -2,16 +2,36 @@
 
 Notification microservice for email, SMS, and in-app notifications.
 
+Module path: `github.com/duynhlab/notification-service`.
+
 ## Features
 
 - Email notifications
 - SMS notifications
-- In-app notifications
+- In-app notifications (list, unread count, get by ID)
 - Mark as read
+
+## Transports
+
+The service exposes two listeners:
+
+- **HTTP (`:8080`)** — browser-facing `private` routes (JWT) and in-cluster
+  `internal` routes, plus `/health`, `/ready`, `/metrics`.
+- **gRPC (`:9090`)** — east-west transport (the official one). Always runs.
+
+### gRPC role
+
+- **Server**: implements `notification.v1.NotificationService` (`SendEmail`,
+  `SendSMS`). `SendEmail` is called best-effort by `order-service` on checkout.
+  Built via the shared `pkg/grpcx` bootstrap (OpenTelemetry interceptors, health,
+  reflection).
+- **Client**: validates JWTs by calling `auth.v1.AuthService/GetMe` over gRPC
+  through the shared `pkg/authmw` middleware. Target is `AUTH_GRPC_ADDR`
+  (default `dns:///auth.auth.svc.cluster.local:9090`).
 
 ## API Endpoints
 
-All routes follow Variant A naming — single path for browser and in-cluster callers. See [homelab naming convention](https://github.com/duynhlab/homelab/blob/main/docs/api/api-naming-convention.md).
+All HTTP routes follow Variant A naming — single path for browser and in-cluster callers. See [homelab naming convention](https://github.com/duynhlab/homelab/blob/main/docs/api/api-naming-convention.md).
 
 | Method | Path | Audience |
 |--------|------|----------|
@@ -22,18 +42,70 @@ All routes follow Variant A naming — single path for browser and in-cluster ca
 | `POST` | `/notification/v1/internal/notify/email` | internal (in-cluster only) |
 | `POST` | `/notification/v1/internal/notify/sms` | internal (in-cluster only) |
 
+`private` routes require a valid JWT (enforced by `authmw.Middleware`, which calls
+auth over gRPC). `internal` routes are reachable only via service DNS — never on
+the gateway. The same `SendEmail`/`SendSMS` operations are also exposed over gRPC.
+
+## Observability
+
+Uses the shared `github.com/duynhlab/pkg/obsx` package.
+
+- **Metrics**: `obsx.SetupMetrics()` bridges gRPC RED metrics
+  (`rpc_server_*` and `rpc_client_*`) onto the **existing** `/metrics` endpoint
+  via the shared Prometheus registry. There is **no separate metrics port**; the
+  platform `ServiceMonitor` scrapes `/metrics` on `:8080`. HTTP RED metrics
+  (`request_duration_seconds`, `requests_in_flight`, `request_size_bytes`,
+  `response_size_bytes`) are emitted by the Gin Prometheus middleware on the same
+  endpoint, with trace exemplars.
+- **Tracing**: OpenTelemetry → OTLP HTTP to the OTel Collector
+  (`OTEL_COLLECTOR_ENDPOINT`), sampled at `OTEL_SAMPLE_RATE` (10% default).
+- **Logging**: structured Zap (JSON). The logging middleware uses
+  `obsx.TraceIDFromContext` so log `trace_id` matches the exported trace, falling
+  back to the `traceparent` / `X-Trace-ID` header or a generated ID.
+- **Profiling**: Pyroscope continuous profiling (`PYROSCOPE_ENDPOINT`).
+
+Gin middleware chain (order): **tracing → logging → metrics**.
+
 ## Tech Stack
 
-- Go + Gin framework
-- PostgreSQL 16 (supporting-db cluster, cross-namespace)
-- PgBouncer connection pooling
-- OpenTelemetry tracing
+- Go 1.26 + Gin
+- gRPC (`google.golang.org/grpc`) via shared `pkg/grpcx`
+- PostgreSQL via pgx/v5 (simple protocol, statement cache disabled for
+  transaction-mode poolers like PgBouncer/PgCat)
+- Shared `pkg` modules: `obsx`, `grpcx`, `authmw`, `proto/auth/v1`,
+  `proto/notification/v1`
+- OpenTelemetry tracing, Pyroscope profiling, Prometheus metrics
+
+## Configuration
+
+Loaded from environment via `config.Load()` (12-factor; `.env` supported locally,
+env vars take precedence). Key variables:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SERVICE_NAME` | _(required)_ | Service name (traces, profiling) |
+| `PORT` | `8080` | HTTP listen port |
+| `GRPC_PORT` | `9090` | gRPC listen port |
+| `ENV` | `development` | `development`/`staging`/`production` |
+| `AUTH_GRPC_ADDR` | `dns:///auth.auth.svc.cluster.local:9090` | Auth gRPC target |
+| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | — | PostgreSQL connection |
+| `DB_SSLMODE` | `disable` | PostgreSQL SSL mode |
+| `DB_POOL_MAX_CONNECTIONS` | `25` | pgx pool max conns |
+| `TRACING_ENABLED` | `true` | Toggle OpenTelemetry tracing |
+| `OTEL_COLLECTOR_ENDPOINT` | `otel-collector-…:4318` | OTLP HTTP endpoint |
+| `OTEL_SAMPLE_RATE` | `0.1` | Trace sample rate (0.0–1.0) |
+| `PROFILING_ENABLED` | `true` | Toggle Pyroscope profiling |
+| `PYROSCOPE_ENDPOINT` | `http://pyroscope.monitoring…:4040` | Pyroscope endpoint |
+| `METRICS_ENABLED` | `true` | Toggle metrics setup |
+| `LOG_LEVEL` / `LOG_FORMAT` | `info` / `json` | Structured logging |
+| `SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout (max 60s) |
+| `READINESS_DRAIN_DELAY` | `5s` | Pre-shutdown drain delay (max 30s) |
 
 ## Development
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - [golangci-lint](https://golangci-lint.run/welcome/install/) v2+
 
 ### Local Development
