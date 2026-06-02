@@ -23,6 +23,7 @@ import (
 	"github.com/duynhlab/notification-service/middleware"
 	"github.com/duynhlab/pkg/authmw"
 	"github.com/duynhlab/pkg/grpcx"
+	"github.com/duynhlab/pkg/obsx"
 	authv1 "github.com/duynhlab/pkg/proto/auth/v1"
 	notificationv1 "github.com/duynhlab/pkg/proto/notification/v1"
 )
@@ -47,6 +48,19 @@ func main() {
 	)
 
 	tp := initTracing(cfg, logger)
+
+	// Bridge gRPC OTel RED metrics onto the existing Prometheus /metrics endpoint.
+	// Must run before grpcx.NewServer so the otelgrpc handlers pick up the global
+	// MeterProvider.
+	if cfg.Metrics.Enabled {
+		shutdownMetrics, err := obsx.SetupMetrics()
+		if err != nil {
+			logger.Warn("Failed to initialize metrics", zap.Error(err))
+		} else {
+			logger.Info("Metrics initialized (gRPC RED metrics on /metrics)")
+			defer func() { _ = shutdownMetrics(context.Background()) }()
+		}
+	}
 
 	initProfiling(cfg, logger)
 
