@@ -2,7 +2,6 @@ package v1
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -11,9 +10,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
-
-// errInvalidUserID is the error format used when the user id cannot be parsed.
-const errInvalidUserID = "invalid user_id: %s"
 
 type NotificationService struct {
 	repo domain.NotificationRepository
@@ -94,8 +90,9 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
-		return nil, fmt.Errorf(errInvalidUserID, userID)
+		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+		span.RecordError(invalidErr)
+		return nil, invalidErr
 	}
 
 	notifications, err := s.repo.ListByUserID(ctx, uid)
@@ -129,8 +126,9 @@ func (s *NotificationService) GetNotification(ctx context.Context, id, userID st
 
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
-		return nil, fmt.Errorf(errInvalidUserID, userID)
+		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+		span.RecordError(invalidErr)
+		return nil, invalidErr
 	}
 
 	notification, err := s.repo.FindByID(ctx, notificationID, uid)
@@ -165,8 +163,9 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
-		return nil, fmt.Errorf(errInvalidUserID, userID)
+		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+		span.RecordError(invalidErr)
+		return nil, invalidErr
 	}
 
 	updated, err := s.repo.MarkAsRead(ctx, notificationID, uid)
@@ -195,12 +194,13 @@ func (s *NotificationService) CountUnread(ctx context.Context, userID string) (i
 
 	// Security: Validate userID - reject empty or invalid input
 	if userID == "" {
-		return 0, errors.New("user_id is required")
+		return 0, fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
 	}
 	uid, err := strconv.Atoi(userID)
 	if err != nil || uid <= 0 {
-		span.RecordError(fmt.Errorf(errInvalidUserID, userID))
-		return 0, fmt.Errorf(errInvalidUserID, userID)
+		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+		span.RecordError(invalidErr)
+		return 0, invalidErr
 	}
 
 	// Use repository for database access (proper 3-layer architecture)
