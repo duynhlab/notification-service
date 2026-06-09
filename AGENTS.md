@@ -52,7 +52,7 @@ platform. It handles email, SMS, and in-app notifications.
   - `core/database.go` — pgx/v5 pool (`Connect` / `GetPool`).
 - `middleware/` — tracing, logging, prometheus, profiling, resource middleware.
 - `config/` — config loading and validation.
-- `db/migrations/` — Flyway migrations (`sql/`) plus init-image `.trivyignore`.
+- `db/migrations/` — golang-migrate SQL (`sql/000001_*.up.sql`), embedded via `embed.go` (`embed.FS`).
 
 ## Build, test, lint
 
@@ -155,8 +155,8 @@ Use Mermaid for all diagrams. Never use ASCII art.
   `database.GetPool()`).
 - Kyverno admission rejects images tagged `:latest`. Use
   `ghcr.io/duynhlab/notification-service:<sha>` or `:vX.Y.Z`.
-- `db/migrations/.trivyignore` suppresses upstream CVEs in the Flyway init image's
-  bundled JARs (cannot be fixed locally). Re-evaluate, don't blindly extend, when
-  Flyway publishes a patched release.
+- Migrations run via golang-migrate v4.19.1 (`pkg/migratex`), embedded and applied
+  from the `migrate` subcommand; the init container reuses the app image
+  (`args: ["migrate"]`). Migrations are forward-only (`.up.sql`).
 - Graceful shutdown follows the VictoriaMetrics pattern: `/ready` → 503, drain
   delay (5s), then shut down HTTP → Database → Tracer in order.
