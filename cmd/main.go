@@ -19,12 +19,14 @@ import (
 	"github.com/duynhlab/notification-service/config"
 	migrations "github.com/duynhlab/notification-service/db/migrations"
 	database "github.com/duynhlab/notification-service/internal/core"
+	"github.com/duynhlab/notification-service/internal/core/repository"
 	grpcv1 "github.com/duynhlab/notification-service/internal/grpc/v1"
 	logicv1 "github.com/duynhlab/notification-service/internal/logic/v1"
 	webv1 "github.com/duynhlab/notification-service/internal/web/v1"
 	"github.com/duynhlab/notification-service/middleware"
 	"github.com/duynhlab/pkg/authmw"
 	"github.com/duynhlab/pkg/grpcx"
+	"github.com/duynhlab/pkg/logger/zapx"
 	"github.com/duynhlab/pkg/migratex"
 	"github.com/duynhlab/pkg/obsx"
 	authv1 "github.com/duynhlab/pkg/proto/auth/v1"
@@ -34,7 +36,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	logger, err := middleware.NewLogger()
+	logger, err := zapx.New(os.Getenv("LOG_LEVEL"))
 	if err != nil {
 		panic("Failed to initialize logger: " + err.Error())
 	}
@@ -87,7 +89,7 @@ func main() {
 	logger.Info("Database connection pool established")
 
 	// Dependency Injection
-	repo := database.NewNotificationRepository()
+	repo := repository.NewNotificationRepository(pool)
 	service := logicv1.NewNotificationService(repo)
 	handler := webv1.NewHandler(service)
 

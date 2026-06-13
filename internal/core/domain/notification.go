@@ -5,9 +5,10 @@ import "context"
 type NotificationRepository interface {
 	Create(ctx context.Context, notification *Notification, userID int) error
 	FindByID(ctx context.Context, id, userID int) (*Notification, error)
-	ListByUserID(ctx context.Context, userID int) ([]Notification, error)
+	ListByUserID(ctx context.Context, userID, limit, offset int) ([]Notification, error)
 	MarkAsRead(ctx context.Context, id, userID int) (bool, error)
 	CountUnreadByUserID(ctx context.Context, userID int) (int, error)
+	CountByUserID(ctx context.Context, userID int) (int, error)
 }
 
 type Notification struct {

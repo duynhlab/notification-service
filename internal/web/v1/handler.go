@@ -8,6 +8,7 @@ import (
 	"github.com/duynhlab/notification-service/internal/core/domain"
 	logicv1 "github.com/duynhlab/notification-service/internal/logic/v1"
 	"github.com/duynhlab/notification-service/middleware"
+	"github.com/duynhlab/pkg/httpx"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -46,7 +47,7 @@ func (h *Handler) SendEmail(c *gin.Context) {
 		span.SetAttributes(attribute.Bool("request.valid", false))
 		span.RecordError(err)
 		zapLogger.Error("Invalid request", zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidation, "invalid request body")
 		return
 	}
 
@@ -58,11 +59,11 @@ func (h *Handler) SendEmail(c *gin.Context) {
 
 		switch {
 		case errors.Is(err, logicv1.ErrInvalidRecipient):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid recipient"})
+			httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidation, "Invalid recipient")
 		case errors.Is(err, logicv1.ErrDeliveryFailed):
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Delivery failed"})
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Delivery failed")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
 		}
 		return
 	}
@@ -86,7 +87,7 @@ func (h *Handler) SendSMS(c *gin.Context) {
 		span.SetAttributes(attribute.Bool("request.valid", false))
 		span.RecordError(err)
 		zapLogger.Error("Invalid request", zap.Error(err))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidation, "invalid request body")
 		return
 	}
 
@@ -95,7 +96,7 @@ func (h *Handler) SendSMS(c *gin.Context) {
 	if err != nil {
 		span.RecordError(err)
 		zapLogger.Error("Failed to send SMS", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
 		return
 	}
 
@@ -120,20 +121,21 @@ func (h *Handler) ListNotifications(c *gin.Context) {
 	if userID == "" {
 		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
 		zapLogger.Warn(logMsgMissingUserID)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
+		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthorized, errAuthRequired)
 		return
 	}
 
-	notifications, err := h.service.ListNotifications(ctx, userID)
+	page, pageSize := httpx.ParsePage(c)
+	notifications, total, err := h.service.ListNotifications(ctx, userID, pageSize, httpx.Offset(page, pageSize))
 	if err != nil {
 		span.RecordError(err)
 		zapLogger.Error("Failed to list notifications", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
 		return
 	}
 
 	zapLogger.Info("Notifications listed", zap.Int("count", len(notifications)))
-	c.JSON(http.StatusOK, notifications)
+	c.JSON(http.StatusOK, httpx.NewPaginated(notifications, page, pageSize, total))
 }
 
 // handleNotificationByID is a shared handler for operations on a single notification by ID.
@@ -158,7 +160,7 @@ func (h *Handler) handleNotificationByID(
 	if userID == "" {
 		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
 		zapLogger.Warn(logMsgMissingUserID)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
+		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthorized, errAuthRequired)
 		return
 	}
 
@@ -172,9 +174,9 @@ func (h *Handler) handleNotificationByID(
 
 		switch {
 		case errors.Is(err, logicv1.ErrNotificationNotFound):
-			c.JSON(http.StatusNotFound, gin.H{"error": "Notification not found"})
+			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "Notification not found")
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
 		}
 		return
 	}
@@ -210,7 +212,7 @@ func (h *Handler) GetUnreadCount(c *gin.Context) {
 	if userID == "" {
 		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
 		zapLogger.Warn(logMsgMissingUserID)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
+		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthorized, errAuthRequired)
 		return
 	}
 
@@ -218,7 +220,7 @@ func (h *Handler) GetUnreadCount(c *gin.Context) {
 	if err != nil {
 		span.RecordError(err)
 		zapLogger.Error("Failed to count unread notifications", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
 		return
 	}
 

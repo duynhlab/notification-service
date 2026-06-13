@@ -24,6 +24,9 @@ type mockRepo struct {
 
 	unreadCount int
 	unreadErr   error
+
+	totalCount int
+	totalErr   error
 }
 
 func (m *mockRepo) Create(_ context.Context, n *domain.Notification, userID int) error {
@@ -37,7 +40,7 @@ func (m *mockRepo) FindByID(_ context.Context, _, _ int) (*domain.Notification, 
 	return m.findByID, m.findByIDErr
 }
 
-func (m *mockRepo) ListByUserID(_ context.Context, _ int) ([]domain.Notification, error) {
+func (m *mockRepo) ListByUserID(_ context.Context, _, _, _ int) ([]domain.Notification, error) {
 	return m.listResult, m.listErr
 }
 
@@ -47,6 +50,10 @@ func (m *mockRepo) MarkAsRead(_ context.Context, _, _ int) (bool, error) {
 
 func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ int) (int, error) {
 	return m.unreadCount, m.unreadErr
+}
+
+func (m *mockRepo) CountByUserID(_ context.Context, _ int) (int, error) {
+	return m.totalCount, m.totalErr
 }
 
 var errRepo = errors.New("repo failure")
@@ -211,7 +218,7 @@ func TestListNotifications(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			svc := NewNotificationService(tt.repo)
-			got, err := svc.ListNotifications(context.Background(), tt.userID)
+			got, _, err := svc.ListNotifications(context.Background(), tt.userID, 20, 0)
 
 			assertErrIs(t, err, tt.wantErrIs)
 			if tt.wantErrIs == nil && len(got) != tt.wantLen {
