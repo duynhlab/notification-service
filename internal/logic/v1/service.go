@@ -80,7 +80,7 @@ func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSReq
 }
 
 // ListNotifications returns all notifications for a user
-func (s *NotificationService) ListNotifications(ctx context.Context, userID string) ([]domain.Notification, error) {
+func (s *NotificationService) ListNotifications(ctx context.Context, userID string, limit, offset int) ([]domain.Notification, int, error) {
 	ctx, span := middleware.StartSpan(ctx, "notification.list", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
@@ -92,20 +92,26 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 	if err != nil || uid <= 0 {
 		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
 		span.RecordError(invalidErr)
-		return nil, invalidErr
+		return nil, 0, invalidErr
 	}
 
-	notifications, err := s.repo.ListByUserID(ctx, uid)
+	total, err := s.repo.CountByUserID(ctx, uid)
 	if err != nil {
 		span.RecordError(err)
-		return nil, err
+		return nil, 0, err
+	}
+
+	notifications, err := s.repo.ListByUserID(ctx, uid, limit, offset)
+	if err != nil {
+		span.RecordError(err)
+		return nil, 0, err
 	}
 
 	span.SetAttributes(attribute.Int("notifications.count", len(notifications)))
 	if notifications == nil {
-		return []domain.Notification{}, nil
+		notifications = []domain.Notification{}
 	}
-	return notifications, nil
+	return notifications, total, nil
 }
 
 // GetNotification retrieves a single notification by ID, scoped to the owning user.

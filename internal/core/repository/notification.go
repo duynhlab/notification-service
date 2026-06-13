@@ -1,4 +1,7 @@
-package database
+// Package repository holds the Core-layer database implementations of the domain
+// repository interfaces. Implementations receive their *pgxpool.Pool via the
+// constructor (dependency injection) rather than reaching for a global pool.
+package repository
 
 import (
 	"context"
@@ -9,40 +12,42 @@ import (
 
 	"github.com/duynhlab/notification-service/internal/core/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NotificationRepository handles database operations for notifications.
-// This abstraction keeps SQL queries in the Core layer (proper 3-layer architecture).
-type NotificationRepository struct{}
+// NotificationRepository is the pgx-backed implementation of
+// domain.NotificationRepository.
+type NotificationRepository struct {
+	pool *pgxpool.Pool
+}
 
-// NewNotificationRepository creates a new NotificationRepository.
-func NewNotificationRepository() *NotificationRepository {
-	return &NotificationRepository{}
+// NewNotificationRepository wires the repository with an injected connection pool.
+func NewNotificationRepository(pool *pgxpool.Pool) domain.NotificationRepository {
+	return &NotificationRepository{pool: pool}
 }
 
 // CountUnreadByUserID returns the count of unread notifications for a user.
 func (r *NotificationRepository) CountUnreadByUserID(ctx context.Context, userID int) (int, error) {
-	db := GetPool()
-	if db == nil {
-		return 0, errors.New("database connection not available")
-	}
-
 	var count int
-	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND read = false`, userID).Scan(&count)
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND read = false`, userID).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count unread notifications: %w", err)
 	}
+	return count, nil
+}
 
+// CountByUserID returns the total number of notifications for a user (for pagination).
+func (r *NotificationRepository) CountByUserID(ctx context.Context, userID int) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE user_id = $1`, userID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count notifications: %w", err)
+	}
 	return count, nil
 }
 
 // Create inserts a new notification into the database.
 func (r *NotificationRepository) Create(ctx context.Context, notification *domain.Notification, userID int) error {
-	db := GetPool()
-	if db == nil {
-		return errors.New("database connection not available")
-	}
-
 	query := `INSERT INTO notifications (user_id, title, message, type, read) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`
 	var id int
 	var createdAt time.Time
@@ -57,7 +62,7 @@ func (r *NotificationRepository) Create(ctx context.Context, notification *domai
 		message = title
 	}
 
-	err := db.QueryRow(ctx, query, userID, title, message, notification.Type, false).Scan(&id, &createdAt)
+	err := r.pool.QueryRow(ctx, query, userID, title, message, notification.Type, false).Scan(&id, &createdAt)
 	if err != nil {
 		return fmt.Errorf("insert notification: %w", err)
 	}
@@ -72,18 +77,13 @@ func (r *NotificationRepository) Create(ctx context.Context, notification *domai
 
 // FindByID retrieves a notification by its ID, scoped to the owning user.
 func (r *NotificationRepository) FindByID(ctx context.Context, id, userID int) (*domain.Notification, error) {
-	db := GetPool()
-	if db == nil {
-		return nil, errors.New("database connection not available")
-	}
-
 	query := `SELECT id, user_id, title, message, type, read, created_at FROM notifications WHERE id = $1 AND user_id = $2`
 	var notificationID, ownerID int
 	var title, message, notifType *string
 	var read bool
 	var createdAt time.Time
 
-	err := db.QueryRow(ctx, query, id, userID).Scan(&notificationID, &ownerID, &title, &message, &notifType, &read, &createdAt)
+	err := r.pool.QueryRow(ctx, query, id, userID).Scan(&notificationID, &ownerID, &title, &message, &notifType, &read, &createdAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil // Return nil if not found, let caller handle specific error
@@ -117,15 +117,10 @@ func (r *NotificationRepository) FindByID(ctx context.Context, id, userID int) (
 	return notification, nil
 }
 
-// ListByUserID retrieves all notifications for a specific user.
-func (r *NotificationRepository) ListByUserID(ctx context.Context, userID int) ([]domain.Notification, error) {
-	db := GetPool()
-	if db == nil {
-		return nil, errors.New("database connection not available")
-	}
-
-	query := `SELECT id, user_id, title, message, type, read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC`
-	rows, err := db.Query(ctx, query, userID)
+// ListByUserID retrieves a page of notifications for a specific user, newest first.
+func (r *NotificationRepository) ListByUserID(ctx context.Context, userID, limit, offset int) ([]domain.Notification, error) {
+	query := `SELECT id, user_id, title, message, type, read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+	rows, err := r.pool.Query(ctx, query, userID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("query notifications: %w", err)
 	}
@@ -179,16 +174,10 @@ func (r *NotificationRepository) ListByUserID(ctx context.Context, userID int) (
 // MarkAsRead marks a notification as read, scoped to the owning user.
 // Returns true if updated, false if not found (or not owned by the user).
 func (r *NotificationRepository) MarkAsRead(ctx context.Context, id, userID int) (bool, error) {
-	db := GetPool()
-	if db == nil {
-		return false, errors.New("database connection not available")
-	}
-
 	query := `UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2`
-	result, err := db.Exec(ctx, query, id, userID)
+	result, err := r.pool.Exec(ctx, query, id, userID)
 	if err != nil {
 		return false, fmt.Errorf("update notification: %w", err)
 	}
-
 	return result.RowsAffected() > 0, nil
 }
