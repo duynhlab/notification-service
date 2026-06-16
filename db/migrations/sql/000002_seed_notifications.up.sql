@@ -39,3 +39,8 @@ SELECT
     COUNT(CASE WHEN read = false THEN 1 END) as unread_count,
     COUNT(DISTINCT user_id) as users_with_notifications
 FROM notifications;
+
+-- Sequence realignment (consolidated from the former 000003_fix_sequences):
+-- the seed rows above use explicit ids, so realign the sequence to MAX(id) here,
+-- or the first app INSERT collides on the primary key.
+SELECT setval('notifications_id_seq', (SELECT MAX(id) FROM notifications));
