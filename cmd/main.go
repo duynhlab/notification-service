@@ -78,7 +78,18 @@ func main() {
 		}
 	}
 
-	initProfiling(cfg, logger)
+	// Initialize Pyroscope profiling via the shared obsx helper.
+	if cfg.Profiling.Enabled {
+		stopProfiling, err := obsx.SetupProfiling()
+		if err != nil {
+			logger.Warn("Failed to initialize profiling", zap.Error(err))
+		} else {
+			logger.Info("Profiling initialized", zap.String("endpoint", cfg.Profiling.Endpoint))
+			defer func() { _ = stopProfiling(context.Background()) }()
+		}
+	} else {
+		logger.Info("Profiling disabled (PROFILING_ENABLED=false)")
+	}
 
 	pool, err := database.Connect(context.Background())
 	if err != nil {
@@ -152,18 +163,6 @@ func initTracing(cfg *config.Config, logger *zap.Logger) interface{ Shutdown(con
 		zap.Float64("sample_rate", cfg.Tracing.SampleRate),
 	)
 	return tp
-}
-
-func initProfiling(cfg *config.Config, logger *zap.Logger) {
-	if !cfg.Profiling.Enabled {
-		logger.Info("Profiling disabled (PROFILING_ENABLED=false)")
-		return
-	}
-	if err := middleware.InitProfiling(); err != nil {
-		logger.Warn("Failed to initialize profiling", zap.Error(err))
-		return
-	}
-	logger.Info("Profiling initialized", zap.String("endpoint", cfg.Profiling.Endpoint))
 }
 
 func setupServer(
@@ -283,6 +282,5 @@ func runGracefulShutdown(
 		}
 	}
 
-	middleware.StopProfiling()
 	logger.Info("Graceful shutdown complete")
 }
