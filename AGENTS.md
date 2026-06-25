@@ -27,6 +27,11 @@ Agent-focused guide for `notification-service`. Read this before making changes.
   reduce cognitive complexity (`gocognit`).
 - Add tests for new behaviour. Keep changes surgical — match existing style, do
   not refactor unrelated code.
+- Before pushing or opening a PR, verify Sonar new-code coverage ≥80%: run
+  `go test -race -coverprofile=coverage.out ./...` and confirm changed lines are
+  covered, including BOTH branches of any new conditional. `**/cmd/**`,
+  `**/db/migrations/**`, `**/core/repository/**` are coverage-excluded;
+  everything else counts.
 
 ## Project overview
 
