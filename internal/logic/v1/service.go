@@ -3,7 +3,9 @@ package v1
 import (
 	"context"
 	"fmt"
+	"net/mail"
 	"strconv"
+	"strings"
 
 	"github.com/duynhlab/notification-service/internal/core/domain"
 	"github.com/duynhlab/notification-service/middleware"
@@ -28,15 +30,16 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 	))
 	defer span.End()
 
-	// Validate recipient
-	if req.To == "" || req.To == "invalid" {
+	// Validate recipient in the logic layer so gRPC and HTTP share the check
+	// (HTTP binding is not enforced on the gRPC path).
+	if _, err := mail.ParseAddress(req.To); err != nil {
 		span.SetAttributes(attribute.Bool("email.sent", false))
 		return nil, fmt.Errorf("send email to %q: %w", req.To, ErrInvalidRecipient)
 	}
 
 	notification := &domain.Notification{
 		Type:    "email",
-		Message: req.Subject, // Using subject as message/title
+		Message: req.Body,
 		Title:   req.Subject,
 	}
 
@@ -59,6 +62,13 @@ func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSReq
 		attribute.String("to", req.To),
 	))
 	defer span.End()
+
+	// Validate recipient in the logic layer so gRPC and HTTP share the check
+	// (gRPC does no recipient validation of its own).
+	if strings.TrimSpace(req.To) == "" {
+		span.SetAttributes(attribute.Bool("sms.sent", false))
+		return nil, fmt.Errorf("send sms to %q: %w", req.To, ErrInvalidRecipient)
+	}
 
 	notification := &domain.Notification{
 		Type:    "sms",
