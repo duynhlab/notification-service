@@ -82,8 +82,8 @@ func TestSendEmail(t *testing.T) {
 			wantNil:   true,
 		},
 		{
-			name:      "invalid recipient sentinel",
-			req:       domain.SendEmailRequest{UserID: 1, To: "invalid", Subject: "Hi"},
+			name:      "malformed recipient address",
+			req:       domain.SendEmailRequest{UserID: 1, To: "not-an-email", Subject: "Hi"},
 			repo:      &mockRepo{},
 			wantErrIs: ErrInvalidRecipient,
 			wantNil:   true,
@@ -113,6 +113,12 @@ func TestSendEmail(t *testing.T) {
 				}
 				if got.Type != "email" {
 					t.Errorf("Type = %q, want email", got.Type)
+				}
+				if got.Message != tt.req.Body {
+					t.Errorf("Message = %q, want Body %q", got.Message, tt.req.Body)
+				}
+				if got.Title != tt.req.Subject {
+					t.Errorf("Title = %q, want Subject %q", got.Title, tt.req.Subject)
 				}
 			}
 		})
