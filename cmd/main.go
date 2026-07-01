@@ -114,11 +114,17 @@ func main() {
 	authClient := authv1.NewAuthServiceClient(authConn)
 	logger.Info("Auth gRPC client initialized", zap.String("auth_grpc_addr", cfg.AuthGRPCAddr))
 
+	// Local JWT verification via JWKS; opaque tokens fall back to the gRPC GetMe path.
+	verifier, err := authmw.NewVerifier(cfg.JWKSURL, cfg.JWTIssuer, cfg.JWTAudience)
+	if err != nil {
+		logger.Warn("Failed to initialize JWT verifier; falling back to gRPC validation only", zap.Error(err))
+	}
+
 	// Internal gRPC server (east-west). HTTP :8080 is unaffected.
 	grpcSrv := startGRPC(cfg, logger, service)
 
 	var isShuttingDown atomic.Bool
-	srv := setupServer(cfg, logger, &isShuttingDown, handler, authClient, pool)
+	srv := setupServer(cfg, logger, &isShuttingDown, handler, verifier, authClient, pool)
 	runGracefulShutdown(cfg, srv, grpcSrv, tp, pool, logger, &isShuttingDown)
 }
 
@@ -170,6 +176,7 @@ func setupServer(
 	logger *zap.Logger,
 	isShuttingDown *atomic.Bool,
 	handler *webv1.Handler,
+	verifier *authmw.Verifier,
 	authClient authv1.AuthServiceClient,
 	pool interface {
 		Ping(context.Context) error
@@ -203,7 +210,7 @@ func setupServer(
 
 	// Private: user-facing notification list/count/detail/mark-read (JWT required)
 	privateNotif := r.Group("/notification/v1/private")
-	privateNotif.Use(authmw.Middleware(authClient))
+	privateNotif.Use(authmw.MiddlewareJWT(verifier, authClient))
 	{
 		privateNotif.GET("/notifications", handler.ListNotifications)
 		privateNotif.GET("/notifications/count", handler.GetUnreadCount)
