@@ -36,7 +36,6 @@ import (
 	"github.com/duynhlab/pkg/logger/zapx"
 	"github.com/duynhlab/pkg/migratex"
 	"github.com/duynhlab/pkg/obsx"
-	authv1 "github.com/duynhlab/pkg/proto/auth/v1"
 	notificationv1 "github.com/duynhlab/pkg/proto/notification/v1"
 )
 
@@ -109,27 +108,18 @@ func main() {
 	service := logicv1.NewNotificationService(repo)
 	handler := webv1.NewHandler(service)
 
-	// Validate tokens against auth over gRPC (shared fail-closed authmw).
-	authConn, err := grpcx.Dial(cfg.AuthGRPCAddr)
-	if err != nil {
-		logger.Error("Failed to dial auth gRPC", zap.String("addr", cfg.AuthGRPCAddr), zap.Error(err))
-		return
-	}
-	defer func() { _ = authConn.Close() }()
-	authClient := authv1.NewAuthServiceClient(authConn)
-	logger.Info("Auth gRPC client initialized", zap.String("auth_grpc_addr", cfg.AuthGRPCAddr))
-
-	// Local JWT verification via JWKS; opaque tokens fall back to the gRPC GetMe path.
+	// Local JWT verification via JWKS — the only auth path (no gRPC fallback),
+	// so a verifier failure is fatal.
 	verifier, err := authmw.NewVerifier(cfg.JWKSURL, cfg.JWTIssuer, cfg.JWTAudience)
 	if err != nil {
-		logger.Warn("Failed to initialize JWT verifier; falling back to gRPC validation only", zap.Error(err))
+		logger.Fatal("Failed to initialize JWT verifier", zap.Error(err))
 	}
 
 	// Internal gRPC server (east-west). HTTP :8080 is unaffected.
 	grpcSrv := startGRPC(cfg, logger, service)
 
 	var isShuttingDown atomic.Bool
-	srv := setupServer(cfg, logger, &isShuttingDown, handler, verifier, authClient, pool)
+	srv := setupServer(cfg, logger, &isShuttingDown, handler, verifier, pool)
 	runGracefulShutdown(cfg, srv, grpcSrv, tp, pool, logger, &isShuttingDown)
 }
 
@@ -256,7 +246,6 @@ func setupServer(
 	isShuttingDown *atomic.Bool,
 	handler *webv1.Handler,
 	verifier *authmw.Verifier,
-	authClient authv1.AuthServiceClient,
 	pool interface {
 		Ping(context.Context) error
 	},
@@ -289,7 +278,7 @@ func setupServer(
 
 	// Private: user-facing notification list/count/detail/mark-read (JWT required)
 	privateNotif := r.Group("/notification/v1/private")
-	privateNotif.Use(authmw.MiddlewareJWT(verifier, authClient))
+	privateNotif.Use(authmw.MiddlewareJWT(verifier))
 	{
 		privateNotif.GET("/notifications", handler.ListNotifications)
 		privateNotif.GET("/notifications/count", handler.GetUnreadCount)

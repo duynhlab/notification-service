@@ -109,17 +109,16 @@ flowchart LR
     Core --> DB[(PostgreSQL)]
 ```
 
-### gRPC: server AND client
+### gRPC: server only
 
-This service is both a gRPC **server** and a gRPC **client**, both built on shared
-`pkg/grpcx` (OpenTelemetry interceptors, health, reflection).
+This service runs a gRPC **server** built on shared `pkg/grpcx` (OpenTelemetry
+interceptors, health, reflection).
 
 - **Server** — exposes `notification.v1.NotificationService/SendEmail` (and
   `SendSMS`) on `:9090`. `SendEmail` is called best-effort by `order-service` on
   checkout. Impl in `internal/grpc/v1/server.go`.
-- **Client** — validates JWTs via `auth.v1.AuthService/GetMe` through shared
-  `pkg/authmw`. Target is `AUTH_GRPC_ADDR`
-  (default `dns:///auth.auth.svc.cluster.local:9090`).
+- No gRPC client: JWTs are verified locally via the shared `pkg/authmw` JWKS
+  verifier (`AUTH_JWKS_URL`) — no per-request call to auth.
 
 ### API endpoints
 
