@@ -25,9 +25,8 @@ The service exposes two listeners:
   `SendSMS`). `SendEmail` is called best-effort by `order-service` on checkout.
   Built via the shared `pkg/grpcx` bootstrap (OpenTelemetry interceptors, health,
   reflection).
-- **Client**: validates JWTs by calling `auth.v1.AuthService/GetMe` over gRPC
-  through the shared `pkg/authmw` middleware. Target is `AUTH_GRPC_ADDR`
-  (default `dns:///auth.auth.svc.cluster.local:9090`).
+- No gRPC client: JWTs are verified locally via the shared `pkg/authmw` JWKS
+  verifier (`AUTH_JWKS_URL`) — no per-request call to auth.
 
 ## API Endpoints
 
@@ -42,9 +41,9 @@ All HTTP routes follow Variant A naming — single path for browser and in-clust
 | `POST` | `/notification/v1/internal/notify/email` | internal (in-cluster only) |
 | `POST` | `/notification/v1/internal/notify/sms` | internal (in-cluster only) |
 
-`private` routes require a valid JWT (enforced by `authmw.Middleware`, which calls
-auth over gRPC). `internal` routes are reachable only via service DNS — never on
-the gateway. The same `SendEmail`/`SendSMS` operations are also exposed over gRPC.
+`private` routes require a valid JWT (enforced by `authmw.MiddlewareJWT`, which
+verifies RS256 tokens locally against auth's JWKS). `internal` routes are
+reachable only via service DNS — never on the gateway. The same `SendEmail`/`SendSMS` operations are also exposed over gRPC.
 
 ## Observability
 
@@ -72,8 +71,7 @@ Gin middleware chain (order): **tracing → logging → metrics**.
 - gRPC (`google.golang.org/grpc`) via shared `pkg/grpcx`
 - PostgreSQL via pgx/v5 (simple protocol, statement cache disabled for
   transaction-mode poolers like PgBouncer/PgCat)
-- Shared `pkg` modules: `obsx`, `grpcx`, `authmw`, `proto/auth/v1`,
-  `proto/notification/v1`
+- Shared `pkg` modules: `obsx`, `grpcx`, `authmw`, `proto/notification/v1`
 - OpenTelemetry tracing, Pyroscope profiling, Prometheus metrics
 
 ## Configuration
@@ -87,7 +85,7 @@ env vars take precedence). Key variables:
 | `PORT` | `8080` | HTTP listen port |
 | `GRPC_PORT` | `9090` | gRPC listen port |
 | `ENV` | `development` | `development`/`staging`/`production` |
-| `AUTH_GRPC_ADDR` | `dns:///auth.auth.svc.cluster.local:9090` | Auth gRPC target |
+| `AUTH_JWKS_URL` | `http://auth.auth.svc.cluster.local:8080/auth/v1/public/jwks` | Auth JWKS endpoint (local JWT verification) |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | — | PostgreSQL connection |
 | `DB_SSLMODE` | `disable` | PostgreSQL SSL mode |
 | `DB_POOL_MAX_CONNECTIONS` | `25` | pgx pool max conns |
