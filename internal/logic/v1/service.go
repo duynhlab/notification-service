@@ -199,6 +199,37 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 	return s.GetNotification(ctx, id, userID)
 }
 
+// MarkAllAsRead marks every unread notification for a user as read and returns
+// how many were flipped. Idempotent: marking zero rows is a success, not a 404.
+func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID string) (int, error) {
+	ctx, span := middleware.StartSpan(ctx, "notification.mark_all_read", trace.WithAttributes(
+		attribute.String("layer", "logic"),
+		attribute.String("api.version", "v1"),
+		attribute.String("user_id", userID),
+	))
+	defer span.End()
+
+	// Security: Validate userID - reject empty or invalid input
+	if userID == "" {
+		return 0, fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
+	}
+	uid, err := strconv.Atoi(userID)
+	if err != nil || uid <= 0 {
+		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+		span.RecordError(invalidErr)
+		return 0, invalidErr
+	}
+
+	updated, err := s.repo.MarkAllByUserID(ctx, uid)
+	if err != nil {
+		span.RecordError(err)
+		return 0, err
+	}
+
+	span.SetAttributes(attribute.Int("notifications.marked_read", updated))
+	return updated, nil
+}
+
 // CountUnread returns unread notification count for a user
 func (s *NotificationService) CountUnread(ctx context.Context, userID string) (int, error) {
 	ctx, span := middleware.StartSpan(ctx, "notification.count_unread", trace.WithAttributes(

@@ -130,6 +130,7 @@ in-cluster service DNS.
 |--------|------|----------|
 | `GET` | `/notification/v1/private/notifications` | private |
 | `GET` | `/notification/v1/private/notifications/count` | private |
+| `PATCH` | `/notification/v1/private/notifications/read-all` | private |
 | `GET` | `/notification/v1/private/notifications/:id` | private |
 | `PATCH` | `/notification/v1/private/notifications/:id` | private |
 | `POST` | `/notification/v1/internal/notify/email` | internal |

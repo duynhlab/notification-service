@@ -22,6 +22,9 @@ type mockRepo struct {
 	markUpdated bool
 	markErr     error
 
+	markAllCount int
+	markAllErr   error
+
 	unreadCount int
 	unreadErr   error
 
@@ -46,6 +49,10 @@ func (m *mockRepo) ListByUserID(_ context.Context, _, _, _ int) ([]domain.Notifi
 
 func (m *mockRepo) MarkAsRead(_ context.Context, _, _ int) (bool, error) {
 	return m.markUpdated, m.markErr
+}
+
+func (m *mockRepo) MarkAllByUserID(_ context.Context, _ int) (int, error) {
+	return m.markAllCount, m.markAllErr
 }
 
 func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ int) (int, error) {
@@ -401,6 +408,68 @@ func TestCountUnread(t *testing.T) {
 			t.Parallel()
 			svc := NewNotificationService(tt.repo)
 			got, err := svc.CountUnread(context.Background(), tt.userID)
+
+			assertErrIs(t, err, tt.wantErrIs)
+			if tt.wantErrIs == nil && got != tt.wantCount {
+				t.Errorf("count = %d, want %d", got, tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestMarkAllAsRead(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		userID    string
+		repo      *mockRepo
+		wantErrIs error
+		wantCount int
+	}{
+		{
+			name:      "valid user",
+			userID:    "1",
+			repo:      &mockRepo{markAllCount: 5},
+			wantCount: 5,
+		},
+		{
+			name:      "nothing unread",
+			userID:    "1",
+			repo:      &mockRepo{markAllCount: 0},
+			wantCount: 0,
+		},
+		{
+			name:      "empty user id",
+			userID:    "",
+			repo:      &mockRepo{},
+			wantErrIs: ErrInvalidUserID,
+		},
+		{
+			name:      "non-numeric user id",
+			userID:    "abc",
+			repo:      &mockRepo{},
+			wantErrIs: ErrInvalidUserID,
+		},
+		{
+			name:      "zero user id",
+			userID:    "0",
+			repo:      &mockRepo{},
+			wantErrIs: ErrInvalidUserID,
+		},
+		{
+			name:      "repository error",
+			userID:    "1",
+			repo:      &mockRepo{markAllErr: errRepo},
+			wantErrIs: errRepo,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := NewNotificationService(tt.repo)
+			got, err := svc.MarkAllAsRead(context.Background(), tt.userID)
 
 			assertErrIs(t, err, tt.wantErrIs)
 			if tt.wantErrIs == nil && got != tt.wantCount {
