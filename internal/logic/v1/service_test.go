@@ -417,66 +417,31 @@ func TestCountUnread(t *testing.T) {
 	}
 }
 
+// MarkAllAsRead delegates to the shared userScopedCount helper, whose user_id
+// validation is exercised by TestCountUnread; these cases cover the delegation
+// (marked count returned, repo error propagated) plus one invalid-id path.
 func TestMarkAllAsRead(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name      string
-		userID    string
-		repo      *mockRepo
-		wantErrIs error
-		wantCount int
-	}{
-		{
-			name:      "valid user",
-			userID:    "1",
-			repo:      &mockRepo{markAllCount: 5},
-			wantCount: 5,
-		},
-		{
-			name:      "nothing unread",
-			userID:    "1",
-			repo:      &mockRepo{markAllCount: 0},
-			wantCount: 0,
-		},
-		{
-			name:      "empty user id",
-			userID:    "",
-			repo:      &mockRepo{},
-			wantErrIs: ErrInvalidUserID,
-		},
-		{
-			name:      "non-numeric user id",
-			userID:    "abc",
-			repo:      &mockRepo{},
-			wantErrIs: ErrInvalidUserID,
-		},
-		{
-			name:      "zero user id",
-			userID:    "0",
-			repo:      &mockRepo{},
-			wantErrIs: ErrInvalidUserID,
-		},
-		{
-			name:      "repository error",
-			userID:    "1",
-			repo:      &mockRepo{markAllErr: errRepo},
-			wantErrIs: errRepo,
-		},
-	}
+	t.Run("valid user returns marked count", func(t *testing.T) {
+		t.Parallel()
+		got, err := NewNotificationService(&mockRepo{markAllCount: 5}).MarkAllAsRead(context.Background(), "1")
+		if err != nil || got != 5 {
+			t.Fatalf("MarkAllAsRead = (%d, %v), want (5, nil)", got, err)
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			svc := NewNotificationService(tt.repo)
-			got, err := svc.MarkAllAsRead(context.Background(), tt.userID)
+	t.Run("invalid user id is rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewNotificationService(&mockRepo{}).MarkAllAsRead(context.Background(), "0")
+		assertErrIs(t, err, ErrInvalidUserID)
+	})
 
-			assertErrIs(t, err, tt.wantErrIs)
-			if tt.wantErrIs == nil && got != tt.wantCount {
-				t.Errorf("count = %d, want %d", got, tt.wantCount)
-			}
-		})
-	}
+	t.Run("repository error propagates", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewNotificationService(&mockRepo{markAllErr: errRepo}).MarkAllAsRead(context.Background(), "1")
+		assertErrIs(t, err, errRepo)
+	})
 }
 
 // assertErrIs fails the test unless err matches the expectation: nil when want is

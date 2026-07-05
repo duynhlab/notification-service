@@ -229,6 +229,9 @@ func TestMarkAsRead_NotFound(t *testing.T) {
 	}
 }
 
+// MarkAllAsRead and GetUnreadCount share the respondUserScopedCount helper whose
+// auth (401) and service-error (500) branches are covered by the GetUnreadCount
+// tests; this only needs the success/delegation path.
 func TestMarkAllAsRead_Success(t *testing.T) {
 	repo := &mockRepo{markAllCount: 5}
 	c, rec := newCtx(http.MethodPatch, "/notification/v1/private/notifications/read-all", "1", nil)
@@ -239,28 +242,6 @@ func TestMarkAllAsRead_Success(t *testing.T) {
 	}
 	if body := decode(t, rec); body["updated"].(float64) != 5 {
 		t.Errorf("updated = %v, want 5", body["updated"])
-	}
-}
-
-func TestMarkAllAsRead_Unauthorized(t *testing.T) {
-	c, rec := newCtx(http.MethodPatch, "/notification/v1/private/notifications/read-all", "", nil)
-	newHandler(&mockRepo{}).MarkAllAsRead(c)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
-	}
-	if code := decode(t, rec)["code"]; code != "UNAUTHORIZED" {
-		t.Errorf("code = %v, want UNAUTHORIZED", code)
-	}
-}
-
-func TestMarkAllAsRead_ServiceError(t *testing.T) {
-	repo := &mockRepo{markAllErr: context.DeadlineExceeded}
-	c, rec := newCtx(http.MethodPatch, "/notification/v1/private/notifications/read-all", "1", nil)
-	newHandler(repo).MarkAllAsRead(c)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 }
 

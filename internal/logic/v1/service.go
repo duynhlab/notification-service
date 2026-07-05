@@ -199,64 +199,45 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 	return s.GetNotification(ctx, id, userID)
 }
 
+// userScopedCount validates the user_id and runs a user-scoped action returning
+// an integer (unread count, rows marked, …). Shared by the count-style methods so
+// the validation + tracing live in one place.
+func (s *NotificationService) userScopedCount(ctx context.Context, userID, spanName string, action func(context.Context, int) (int, error)) (int, error) {
+	ctx, span := middleware.StartSpan(ctx, spanName, trace.WithAttributes(
+		attribute.String("layer", "logic"),
+		attribute.String("api.version", "v1"),
+		attribute.String("user_id", userID),
+	))
+	defer span.End()
+
+	// Security: Validate userID - reject empty or invalid input
+	if userID == "" {
+		return 0, fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
+	}
+	uid, err := strconv.Atoi(userID)
+	if err != nil || uid <= 0 {
+		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+		span.RecordError(invalidErr)
+		return 0, invalidErr
+	}
+
+	n, err := action(ctx, uid)
+	if err != nil {
+		span.RecordError(err)
+		return 0, err
+	}
+
+	span.SetAttributes(attribute.Int("result.count", n))
+	return n, nil
+}
+
+// CountUnread returns unread notification count for a user.
+func (s *NotificationService) CountUnread(ctx context.Context, userID string) (int, error) {
+	return s.userScopedCount(ctx, userID, "notification.count_unread", s.repo.CountUnreadByUserID)
+}
+
 // MarkAllAsRead marks every unread notification for a user as read and returns
 // how many were flipped. Idempotent: marking zero rows is a success, not a 404.
 func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID string) (int, error) {
-	ctx, span := middleware.StartSpan(ctx, "notification.mark_all_read", trace.WithAttributes(
-		attribute.String("layer", "logic"),
-		attribute.String("api.version", "v1"),
-		attribute.String("user_id", userID),
-	))
-	defer span.End()
-
-	// Security: Validate userID - reject empty or invalid input
-	if userID == "" {
-		return 0, fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
-	}
-	uid, err := strconv.Atoi(userID)
-	if err != nil || uid <= 0 {
-		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
-		span.RecordError(invalidErr)
-		return 0, invalidErr
-	}
-
-	updated, err := s.repo.MarkAllByUserID(ctx, uid)
-	if err != nil {
-		span.RecordError(err)
-		return 0, err
-	}
-
-	span.SetAttributes(attribute.Int("notifications.marked_read", updated))
-	return updated, nil
-}
-
-// CountUnread returns unread notification count for a user
-func (s *NotificationService) CountUnread(ctx context.Context, userID string) (int, error) {
-	ctx, span := middleware.StartSpan(ctx, "notification.count_unread", trace.WithAttributes(
-		attribute.String("layer", "logic"),
-		attribute.String("api.version", "v1"),
-		attribute.String("user_id", userID),
-	))
-	defer span.End()
-
-	// Security: Validate userID - reject empty or invalid input
-	if userID == "" {
-		return 0, fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
-	}
-	uid, err := strconv.Atoi(userID)
-	if err != nil || uid <= 0 {
-		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
-		span.RecordError(invalidErr)
-		return 0, invalidErr
-	}
-
-	// Use repository for database access (proper 3-layer architecture)
-	count, err := s.repo.CountUnreadByUserID(ctx, uid)
-	if err != nil {
-		span.RecordError(err)
-		return 0, err
-	}
-
-	span.SetAttributes(attribute.Int("notifications.unread_count", count))
-	return count, nil
+	return s.userScopedCount(ctx, userID, "notification.mark_all_read", s.repo.MarkAllByUserID)
 }
