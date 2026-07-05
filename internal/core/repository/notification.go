@@ -181,3 +181,14 @@ func (r *NotificationRepository) MarkAsRead(ctx context.Context, id, userID int)
 	}
 	return result.RowsAffected() > 0, nil
 }
+
+// MarkAllByUserID marks every unread notification for a user as read and returns
+// how many rows were flipped. Idempotent: a second call affects zero rows.
+func (r *NotificationRepository) MarkAllByUserID(ctx context.Context, userID int) (int, error) {
+	query := `UPDATE notifications SET read = true WHERE user_id = $1 AND read = false`
+	result, err := r.pool.Exec(ctx, query, userID)
+	if err != nil {
+		return 0, fmt.Errorf("mark all notifications read: %w", err)
+	}
+	return int(result.RowsAffected()), nil
+}

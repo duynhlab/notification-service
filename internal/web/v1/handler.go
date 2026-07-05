@@ -22,6 +22,8 @@ const (
 	logMsgMissingUserID = "Missing user_id in request context"
 	// errAuthRequired is the response message when a request lacks a valid user.
 	errAuthRequired = "Authentication required"
+	// errInternal is the generic 500 response message.
+	errInternal = "Internal server error"
 )
 
 type Handler struct {
@@ -63,7 +65,7 @@ func (h *Handler) SendEmail(c *gin.Context) {
 		case errors.Is(err, logicv1.ErrDeliveryFailed):
 			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Delivery failed")
 		default:
-			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		}
 		return
 	}
@@ -96,7 +98,7 @@ func (h *Handler) SendSMS(c *gin.Context) {
 	if err != nil {
 		span.RecordError(err)
 		zapLogger.Error("Failed to send SMS", zap.Error(err))
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		return
 	}
 
@@ -130,7 +132,7 @@ func (h *Handler) ListNotifications(c *gin.Context) {
 	if err != nil {
 		span.RecordError(err)
 		zapLogger.Error("Failed to list notifications", zap.Error(err))
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		return
 	}
 
@@ -176,7 +178,7 @@ func (h *Handler) handleNotificationByID(
 		case errors.Is(err, logicv1.ErrNotificationNotFound):
 			httpx.RespondError(c, http.StatusNotFound, httpx.CodeNotFound, "Notification not found")
 		default:
-			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
+			httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		}
 		return
 	}
@@ -195,8 +197,11 @@ func (h *Handler) MarkAsRead(c *gin.Context) {
 	h.handleNotificationByID(c, h.service.MarkAsRead, "Notification marked as read")
 }
 
-// GetUnreadCount handles GET /notification/v1/private/notifications/count
-func (h *Handler) GetUnreadCount(c *gin.Context) {
+// respondUserScopedCount runs a user-scoped action returning an integer,
+// applying the shared auth-check, error handling, and {resultKey: n} response
+// used by the count-style endpoints. resultKey names both the JSON field and
+// the log field; errLog / okLog are the failure / success log messages.
+func (h *Handler) respondUserScopedCount(c *gin.Context, resultKey, errLog, okLog string, action func(context.Context, string) (int, error)) {
 	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
 		attribute.String("layer", "web"),
 		attribute.String("api.version", "v1"),
@@ -216,14 +221,24 @@ func (h *Handler) GetUnreadCount(c *gin.Context) {
 		return
 	}
 
-	count, err := h.service.CountUnread(ctx, userID)
+	n, err := action(ctx, userID)
 	if err != nil {
 		span.RecordError(err)
-		zapLogger.Error("Failed to count unread notifications", zap.Error(err))
-		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, "Internal server error")
+		zapLogger.Error(errLog, zap.Error(err))
+		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		return
 	}
 
-	zapLogger.Info("Unread count retrieved", zap.Int("count", count))
-	c.JSON(http.StatusOK, gin.H{"count": count})
+	zapLogger.Info(okLog, zap.Int(resultKey, n))
+	c.JSON(http.StatusOK, gin.H{resultKey: n})
+}
+
+// GetUnreadCount handles GET /notification/v1/private/notifications/count
+func (h *Handler) GetUnreadCount(c *gin.Context) {
+	h.respondUserScopedCount(c, "count", "Failed to count unread notifications", "Unread count retrieved", h.service.CountUnread)
+}
+
+// MarkAllAsRead handles PATCH /notification/v1/private/notifications/read-all
+func (h *Handler) MarkAllAsRead(c *gin.Context) {
+	h.respondUserScopedCount(c, "updated", "Failed to mark all notifications read", "Marked all notifications read", h.service.MarkAllAsRead)
 }

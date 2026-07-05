@@ -282,6 +282,7 @@ func setupServer(
 	{
 		privateNotif.GET("/notifications", handler.ListNotifications)
 		privateNotif.GET("/notifications/count", handler.GetUnreadCount)
+		privateNotif.PATCH("/notifications/read-all", handler.MarkAllAsRead)
 		privateNotif.GET("/notifications/:id", handler.GetNotification)
 		privateNotif.PATCH("/notifications/:id", handler.MarkAsRead)
 	}

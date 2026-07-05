@@ -187,4 +187,28 @@ func TestNotificationRepository_Integration(t *testing.T) {
 			t.Error("MarkAsRead(missing) = true, want false")
 		}
 	})
+
+	t.Run("MarkAllByUserID flips every unread row and is idempotent", func(t *testing.T) {
+		const bulkUser = 998 // isolated from the userID rows above
+		for i := 0; i < 3; i++ {
+			if err := repo.Create(ctx, &domain.Notification{Message: "bulk"}, bulkUser); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+		}
+
+		marked, err := repo.MarkAllByUserID(ctx, bulkUser)
+		if err != nil || marked != 3 {
+			t.Fatalf("MarkAllByUserID = (%d, %v), want (3, nil)", marked, err)
+		}
+		unread, err := repo.CountUnreadByUserID(ctx, bulkUser)
+		if err != nil || unread != 0 {
+			t.Fatalf("CountUnreadByUserID after mark-all = (%d, %v), want (0, nil)", unread, err)
+		}
+
+		// Idempotent: a second sweep finds nothing to flip.
+		again, err := repo.MarkAllByUserID(ctx, bulkUser)
+		if err != nil || again != 0 {
+			t.Fatalf("MarkAllByUserID (2nd) = (%d, %v), want (0, nil)", again, err)
+		}
+	})
 }

@@ -7,6 +7,7 @@ type NotificationRepository interface {
 	FindByID(ctx context.Context, id, userID int) (*Notification, error)
 	ListByUserID(ctx context.Context, userID, limit, offset int) ([]Notification, error)
 	MarkAsRead(ctx context.Context, id, userID int) (bool, error)
+	MarkAllByUserID(ctx context.Context, userID int) (int, error)
 	CountUnreadByUserID(ctx context.Context, userID int) (int, error)
 	CountByUserID(ctx context.Context, userID int) (int, error)
 }

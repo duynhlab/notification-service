@@ -22,6 +22,9 @@ type mockRepo struct {
 	markUpdated bool
 	markErr     error
 
+	markAllCount int
+	markAllErr   error
+
 	unreadCount int
 	unreadErr   error
 
@@ -46,6 +49,10 @@ func (m *mockRepo) ListByUserID(_ context.Context, _, _, _ int) ([]domain.Notifi
 
 func (m *mockRepo) MarkAsRead(_ context.Context, _, _ int) (bool, error) {
 	return m.markUpdated, m.markErr
+}
+
+func (m *mockRepo) MarkAllByUserID(_ context.Context, _ int) (int, error) {
+	return m.markAllCount, m.markAllErr
 }
 
 func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ int) (int, error) {
@@ -408,6 +415,33 @@ func TestCountUnread(t *testing.T) {
 			}
 		})
 	}
+}
+
+// MarkAllAsRead delegates to the shared userScopedCount helper, whose user_id
+// validation is exercised by TestCountUnread; these cases cover the delegation
+// (marked count returned, repo error propagated) plus one invalid-id path.
+func TestMarkAllAsRead(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid user returns marked count", func(t *testing.T) {
+		t.Parallel()
+		got, err := NewNotificationService(&mockRepo{markAllCount: 5}).MarkAllAsRead(context.Background(), "1")
+		if err != nil || got != 5 {
+			t.Fatalf("MarkAllAsRead = (%d, %v), want (5, nil)", got, err)
+		}
+	})
+
+	t.Run("invalid user id is rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewNotificationService(&mockRepo{}).MarkAllAsRead(context.Background(), "0")
+		assertErrIs(t, err, ErrInvalidUserID)
+	})
+
+	t.Run("repository error propagates", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewNotificationService(&mockRepo{markAllErr: errRepo}).MarkAllAsRead(context.Background(), "1")
+		assertErrIs(t, err, errRepo)
+	})
 }
 
 // assertErrIs fails the test unless err matches the expectation: nil when want is

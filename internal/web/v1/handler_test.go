@@ -28,6 +28,9 @@ type mockRepo struct {
 	markUpdated bool
 	markErr     error
 
+	markAllCount int
+	markAllErr   error
+
 	unreadCount int
 	unreadErr   error
 
@@ -46,6 +49,9 @@ func (m *mockRepo) ListByUserID(_ context.Context, _, _, _ int) ([]domain.Notifi
 }
 func (m *mockRepo) MarkAsRead(_ context.Context, _, _ int) (bool, error) {
 	return m.markUpdated, m.markErr
+}
+func (m *mockRepo) MarkAllByUserID(_ context.Context, _ int) (int, error) {
+	return m.markAllCount, m.markAllErr
 }
 func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ int) (int, error) {
 	return m.unreadCount, m.unreadErr
@@ -220,6 +226,22 @@ func TestMarkAsRead_NotFound(t *testing.T) {
 	}
 	if code := decode(t, rec)["code"]; code != "NOT_FOUND" {
 		t.Errorf("code = %v, want NOT_FOUND", code)
+	}
+}
+
+// MarkAllAsRead and GetUnreadCount share the respondUserScopedCount helper whose
+// auth (401) and service-error (500) branches are covered by the GetUnreadCount
+// tests; this only needs the success/delegation path.
+func TestMarkAllAsRead_Success(t *testing.T) {
+	repo := &mockRepo{markAllCount: 5}
+	c, rec := newCtx(http.MethodPatch, "/notification/v1/private/notifications/read-all", "1", nil)
+	newHandler(repo).MarkAllAsRead(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := decode(t, rec); body["updated"].(float64) != 5 {
+		t.Errorf("updated = %v, want 5", body["updated"])
 	}
 }
 
