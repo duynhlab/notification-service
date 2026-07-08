@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -67,10 +68,13 @@ func main() {
 		zap.String("port", cfg.Service.Port),
 	)
 
-	tp := initTracing(cfg, logger)
-
-	// Bridge gRPC OTel RED metrics onto the existing Prometheus /metrics endpoint.
-	// Must run before grpcx.NewServer so the otelgrpc handlers pick up the global
+	// Initialize the OTel→Prometheus bridge FIRST (gRPC RED metrics on the
+	// scraped /metrics endpoint — the flag-off status quo). When
+	// OTEL_METRICS_ENABLED=true, SetupObservability below installs the OTLP
+	// MeterProvider as the global AFTER this, deliberately superseding the
+	// bridge (RFC-0014 dual-emit: client_golang scrape stays untouched either
+	// way; only the OTel-instrumented metrics switch transport). Both run
+	// before grpcx.NewServer so the otelgrpc handlers pick up the global
 	// MeterProvider.
 	if cfg.Metrics.Enabled {
 		shutdownMetrics, err := obsx.SetupMetrics()
@@ -80,6 +84,34 @@ func main() {
 			logger.Info("Metrics initialized (gRPC RED metrics on /metrics)")
 			defer func() { _ = shutdownMetrics(context.Background()) }()
 		}
+	}
+
+	// RFC-0014: single OTel wiring point — traces per TRACING_ENABLED, OTLP
+	// metrics/logs behind OTEL_METRICS_ENABLED/OTEL_LOGS_ENABLED (default off).
+	// The config is built once so the tracer scope name and the startup log
+	// reflect the values obsx actually uses.
+	otelCfg := obsx.ConfigFromEnv()
+	middleware.SetServiceName(otelCfg.ServiceName)
+	var tp interface{ Shutdown(context.Context) error }
+	obs, err := obsx.SetupObservability(context.Background(), otelCfg)
+	if err != nil {
+		logger.Warn("Failed to initialize OpenTelemetry", zap.Error(err))
+	} else {
+		tp = obs
+		if obs.TracerProvider != nil && cfg.Profiling.Enabled {
+			// Preserve traces→profiles correlation: spans carry
+			// pyroscope.profile.id when the wrapped provider is global.
+			// (pkg v0.16.1 absorbs this wrap via Config.ProfilingEnabled —
+			// drop this block on the next pkg bump.)
+			otel.SetTracerProvider(obsx.TracerProviderWithProfiles(obs.TracerProvider))
+		}
+		logger.Info("OpenTelemetry initialized",
+			zap.Bool("traces", obs.TracerProvider != nil),
+			zap.Bool("otlp_metrics", obs.MeterProvider != nil),
+			zap.Bool("otlp_logs", obs.LoggerProvider != nil),
+			zap.String("endpoint", otelCfg.Endpoint),
+			zap.Float64("sample_rate", otelCfg.SampleRate),
+		)
 	}
 
 	// Initialize Pyroscope profiling via the shared obsx helper.
@@ -223,23 +255,6 @@ func startGRPC(cfg *config.Config, logger *zap.Logger, svc *logicv1.Notification
 	return grpcSrv
 }
 
-func initTracing(cfg *config.Config, logger *zap.Logger) interface{ Shutdown(context.Context) error } {
-	if !cfg.Tracing.Enabled {
-		logger.Info("Tracing disabled (TRACING_ENABLED=false)")
-		return nil
-	}
-	tp, err := middleware.InitTracing(cfg)
-	if err != nil {
-		logger.Warn("Failed to initialize tracing", zap.Error(err))
-		return nil
-	}
-	logger.Info("Tracing initialized",
-		zap.String("endpoint", cfg.Tracing.Endpoint),
-		zap.Float64("sample_rate", cfg.Tracing.SampleRate),
-	)
-	return tp
-}
-
 func setupServer(
 	cfg *config.Config,
 	logger *zap.Logger,
@@ -350,11 +365,13 @@ func runGracefulShutdown(
 	pool.Close()
 	logger.Info("Database pool closed")
 
+	// Shutdown the OTel SDK — flushes pending spans plus any OTLP
+	// metrics/logs providers built behind the RFC-0014 flags.
 	if tp != nil {
 		if err := tp.Shutdown(shutdownCtx); err != nil {
-			logger.Error("Tracer shutdown error", zap.Error(err))
+			logger.Error("OpenTelemetry shutdown error", zap.Error(err))
 		} else {
-			logger.Info("Tracer shutdown complete")
+			logger.Info("OpenTelemetry shutdown complete")
 		}
 	}
 
