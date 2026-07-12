@@ -33,7 +33,7 @@ func NewServer(svc Notifier) *Server {
 	return &Server{svc: svc}
 }
 
-// SendEmail mirrors POST /notification/v1/internal/notify/email, sending an
+// SendEmail mirrors POST /notification/v1/internal/notifications/email, sending an
 // email notification and returning the created record.
 func (s *Server) SendEmail(
 	ctx context.Context,
@@ -55,7 +55,7 @@ func (s *Server) SendEmail(
 	return &notificationv1.SendEmailResponse{Notification: toProto(n)}, nil
 }
 
-// SendSMS mirrors POST /notification/v1/internal/notify/sms, sending an SMS
+// SendSMS mirrors POST /notification/v1/internal/notifications/sms, sending an SMS
 // notification and returning the created record.
 func (s *Server) SendSMS(
 	ctx context.Context,

@@ -33,6 +33,9 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Database.MaxConnections != 25 {
 		t.Errorf("default MaxConnections = %d, want 25", cfg.Database.MaxConnections)
 	}
+	if want := "http://auth.auth.svc.cluster.local:8080/auth/v1/public/auth/jwks"; cfg.JWKSURL != want {
+		t.Errorf("default JWKSURL = %q, want %q", cfg.JWKSURL, want)
+	}
 }
 
 func TestLoad_Overrides(t *testing.T) {

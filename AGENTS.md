@@ -133,8 +133,8 @@ in-cluster service DNS.
 | `PATCH` | `/notification/v1/private/notifications/read-all` | private |
 | `GET` | `/notification/v1/private/notifications/:id` | private |
 | `PATCH` | `/notification/v1/private/notifications/:id` | private |
-| `POST` | `/notification/v1/internal/notify/email` | internal |
-| `POST` | `/notification/v1/internal/notify/sms` | internal |
+| `POST` | `/notification/v1/internal/notifications/email` | internal |
+| `POST` | `/notification/v1/internal/notifications/sms` | internal |
 
 Full inventory: [`homelab/docs/api/api-naming-convention.md`](https://github.com/duynhlab/homelab/blob/main/docs/api/api-naming-convention.md).
 

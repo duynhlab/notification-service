@@ -39,8 +39,8 @@ All HTTP routes follow Variant A naming — single path for browser and in-clust
 | `PATCH` | `/notification/v1/private/notifications/read-all` | private |
 | `GET` | `/notification/v1/private/notifications/:id` | private |
 | `PATCH` | `/notification/v1/private/notifications/:id` | private |
-| `POST` | `/notification/v1/internal/notify/email` | internal (in-cluster only) |
-| `POST` | `/notification/v1/internal/notify/sms` | internal (in-cluster only) |
+| `POST` | `/notification/v1/internal/notifications/email` | internal (in-cluster only) |
+| `POST` | `/notification/v1/internal/notifications/sms` | internal (in-cluster only) |
 
 `private` routes require a valid JWT (enforced by `authmw.MiddlewareJWT`, which
 verifies RS256 tokens locally against auth's JWKS). `internal` routes are
@@ -86,7 +86,7 @@ env vars take precedence). Key variables:
 | `PORT` | `8080` | HTTP listen port |
 | `GRPC_PORT` | `9090` | gRPC listen port |
 | `ENV` | `development` | `development`/`staging`/`production` |
-| `AUTH_JWKS_URL` | `http://auth.auth.svc.cluster.local:8080/auth/v1/public/jwks` | Auth JWKS endpoint (local JWT verification) |
+| `AUTH_JWKS_URL` | `http://auth.auth.svc.cluster.local:8080/auth/v1/public/auth/jwks` | Auth JWKS endpoint (local JWT verification) |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | — | PostgreSQL connection |
 | `DB_SSLMODE` | `disable` | PostgreSQL SSL mode |
 | `DB_POOL_MAX_CONNECTIONS` | `25` | pgx pool max conns |
