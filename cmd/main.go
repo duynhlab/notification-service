@@ -287,11 +287,12 @@ func setupServer(
 		privateNotif.PATCH("/notifications/:id", handler.MarkAsRead)
 	}
 
-	// Internal: service-to-service (e.g. order-service triggers email). Not on gateway.
+	// Internal: HTTP twins of the gRPC SendEmail/SendSMS (order-service calls gRPC;
+	// no live HTTP caller — renamed without aliases in the ADR-017 migration). Not on gateway.
 	internalNotif := r.Group("/notification/v1/internal")
 	{
-		internalNotif.POST("/notify/email", handler.SendEmail)
-		internalNotif.POST("/notify/sms", handler.SendSMS)
+		internalNotif.POST("/notifications/email", handler.SendEmail)
+		internalNotif.POST("/notifications/sms", handler.SendSMS)
 	}
 
 	return &http.Server{
