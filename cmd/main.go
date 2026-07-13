@@ -229,7 +229,7 @@ func startGRPC(cfg *config.Config, logger *zap.Logger, svc *logicv1.Notification
 		return nil
 	}
 
-	grpcSrv, _ := grpcx.NewServer()
+	grpcSrv, _ := grpcx.NewServer(logger)
 	notificationv1.RegisterNotificationServiceServer(grpcSrv, grpcv1.NewServer(svc))
 
 	go func() {
