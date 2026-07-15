@@ -2,55 +2,21 @@ package database
 
 import (
 	"context"
-	"fmt"
-	"math"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/duynhlab/notification-service/config"
+	"github.com/duynhlab/pkg/dbx"
 )
 
-// Connect establishes a database connection pool using pgx/v5 from the parsed
-// application config. The DSN is the single source shared with the `migrate`
-// subcommand (cfg.Database.BuildDSN), so app and migration connections are
-// identical.
+// Connect builds the service's Postgres pool via the shared dbx helper. dbx
+// wires otelpgx query tracing (bounded span names, no bind-parameter or
+// connection PII) and pgxpool.* pool-stat metrics, and applies the
+// transaction-mode-pooler-safe settings (simple protocol, statement/description
+// caches off) required by the PgDog/PgBouncer pooler.
 //
-// pgx is used instead of lib/pq for PgBouncer/PgCat compatibility.
-//
-// IMPORTANT: We use SimpleProtocol mode and disable statement caching to work correctly
-// with transaction-mode connection poolers (PgCat/PgBouncer). Without this, you may see:
-//
-//	"prepared statement stmtcache_* does not exist"
+// The DSN is cfg.Database.BuildDSN() — the single source shared with the
+// `migrate` subcommand, so the app and migrations connect identically.
 func Connect(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
-	// Parse DSN into pool config
-	poolCfg, err := pgxpool.ParseConfig(cfg.Database.BuildDSN())
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse database config: %w", err)
-	}
-
-	if n := cfg.Database.MaxConnections; n > 0 && n <= math.MaxInt32 {
-		poolCfg.MaxConns = int32(n)
-	}
-
-	// Configure for transaction-mode poolers (PgCat/PgBouncer):
-	// - Use simple protocol to avoid server-side prepared statements
-	// - Disable statement cache (prepared statements are connection-scoped)
-	// - Disable description cache
-	poolCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
-	poolCfg.ConnConfig.StatementCacheCapacity = 0
-	poolCfg.ConnConfig.DescriptionCacheCapacity = 0
-
-	// Create connection pool with the configured settings
-	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection pool: %w", err)
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	return pool, nil
+	return dbx.NewPool(ctx, cfg.Database.BuildDSN(), dbx.WithMaxConns(cfg.Database.MaxConnections))
 }
