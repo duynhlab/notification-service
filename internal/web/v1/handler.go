@@ -35,13 +35,8 @@ func NewHandler(service *logicv1.NotificationService) *Handler {
 }
 
 func (h *Handler) SendEmail(c *gin.Context) {
-	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
-		attribute.String("layer", "web"),
-		attribute.String("method", c.Request.Method),
-		attribute.String("path", c.Request.URL.Path),
-	))
-	defer span.End()
-
+	ctx := c.Request.Context()
+	span := trace.SpanFromContext(ctx)
 	zapLogger := middleware.GetLoggerFromGinContext(c)
 
 	var req domain.SendEmailRequest
@@ -75,13 +70,8 @@ func (h *Handler) SendEmail(c *gin.Context) {
 }
 
 func (h *Handler) SendSMS(c *gin.Context) {
-	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
-		attribute.String("layer", "web"),
-		attribute.String("method", c.Request.Method),
-		attribute.String("path", c.Request.URL.Path),
-	))
-	defer span.End()
-
+	ctx := c.Request.Context()
+	span := trace.SpanFromContext(ctx)
 	zapLogger := middleware.GetLoggerFromGinContext(c)
 
 	var req domain.SendSMSRequest
@@ -108,14 +98,8 @@ func (h *Handler) SendSMS(c *gin.Context) {
 
 // ListNotifications handles GET /notification/v1/private/notifications
 func (h *Handler) ListNotifications(c *gin.Context) {
-	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
-		attribute.String("layer", "web"),
-		attribute.String("api.version", "v1"),
-		attribute.String("method", c.Request.Method),
-		attribute.String("path", c.Request.URL.Path),
-	))
-	defer span.End()
-
+	ctx := c.Request.Context()
+	span := trace.SpanFromContext(ctx)
 	zapLogger := middleware.GetLoggerFromGinContext(c)
 
 	// Security: Require valid user_id from auth middleware
@@ -147,14 +131,8 @@ func (h *Handler) handleNotificationByID(
 	action func(ctx context.Context, id, userID string) (*domain.Notification, error),
 	successLog string,
 ) {
-	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
-		attribute.String("layer", "web"),
-		attribute.String("api.version", "v1"),
-		attribute.String("method", c.Request.Method),
-		attribute.String("path", c.Request.URL.Path),
-	))
-	defer span.End()
-
+	ctx := c.Request.Context()
+	span := trace.SpanFromContext(ctx)
 	zapLogger := middleware.GetLoggerFromGinContext(c)
 
 	// Security: Require valid user_id from auth middleware
@@ -202,14 +180,8 @@ func (h *Handler) MarkAsRead(c *gin.Context) {
 // used by the count-style endpoints. resultKey names both the JSON field and
 // the log field; errLog / okLog are the failure / success log messages.
 func (h *Handler) respondUserScopedCount(c *gin.Context, resultKey, errLog, okLog string, action func(context.Context, string) (int, error)) {
-	ctx, span := middleware.StartSpan(c.Request.Context(), "http.request", trace.WithAttributes(
-		attribute.String("layer", "web"),
-		attribute.String("api.version", "v1"),
-		attribute.String("method", c.Request.Method),
-		attribute.String("path", c.Request.URL.Path),
-	))
-	defer span.End()
-
+	ctx := c.Request.Context()
+	span := trace.SpanFromContext(ctx)
 	zapLogger := middleware.GetLoggerFromGinContext(c)
 
 	// Security: Require valid user_id from auth middleware
