@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/duynhlab/notification-service/internal/core/domain"
 	"github.com/duynhlab/notification-service/middleware"
@@ -31,11 +32,15 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 	defer span.End()
 
 	// Validate recipient in the logic layer so gRPC and HTTP share the check
-	// (HTTP binding is not enforced on the gRPC path).
+	// (HTTP binding is not enforced on the gRPC path). A rejected recipient is a
+	// bad request, not a send, so it is left out of the send-latency histogram.
 	if _, err := mail.ParseAddress(req.To); err != nil {
 		span.SetAttributes(attribute.Bool("email.sent", false))
 		return nil, fmt.Errorf("send email to %q: %w", req.To, ErrInvalidRecipient)
 	}
+
+	start := time.Now()
+	defer func() { recordSendDuration(ctx, channelEmail, start) }()
 
 	notification := &domain.Notification{
 		Type:    "email",
@@ -64,11 +69,15 @@ func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSReq
 	defer span.End()
 
 	// Validate recipient in the logic layer so gRPC and HTTP share the check
-	// (gRPC does no recipient validation of its own).
+	// (gRPC does no recipient validation of its own). A rejected recipient is a
+	// bad request, not a send, so it is left out of the send-latency histogram.
 	if strings.TrimSpace(req.To) == "" {
 		span.SetAttributes(attribute.Bool("sms.sent", false))
 		return nil, fmt.Errorf("send sms to %q: %w", req.To, ErrInvalidRecipient)
 	}
+
+	start := time.Now()
+	defer func() { recordSendDuration(ctx, channelSMS, start) }()
 
 	notification := &domain.Notification{
 		Type:    "sms",
@@ -195,6 +204,8 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 		return nil, fmt.Errorf("notification id %q: %w", id, ErrNotificationNotFound)
 	}
 
+	recordRead(ctx, modeSingle, 1)
+
 	// Return updated notification
 	return s.GetNotification(ctx, id, userID)
 }
@@ -239,5 +250,10 @@ func (s *NotificationService) CountUnread(ctx context.Context, userID string) (i
 // MarkAllAsRead marks every unread notification for a user as read and returns
 // how many were flipped. Idempotent: marking zero rows is a success, not a 404.
 func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID string) (int, error) {
-	return s.userScopedCount(ctx, userID, "notification.mark_all_read", s.repo.MarkAllByUserID)
+	n, err := s.userScopedCount(ctx, userID, "notification.mark_all_read", s.repo.MarkAllByUserID)
+	if err != nil {
+		return 0, err
+	}
+	recordRead(ctx, modeAll, int64(n))
+	return n, nil
 }
