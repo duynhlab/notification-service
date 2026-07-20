@@ -109,6 +109,30 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// A password from a file (DB_PASSWORD_FILE, ADR-025 pattern A) satisfies Validate
+// in place of DB_PASSWORD; with neither set it still errors — covering both
+// branches of the new condition.
+func TestValidate_PasswordFile(t *testing.T) {
+	base := func() *Config {
+		c := validConfig()
+		c.Database.Host = "h"
+		c.Database.Name = "n"
+		c.Database.User = "u"
+		return c
+	}
+
+	ok := base()
+	ok.Database.PasswordFile = "/etc/db/secret/password"
+	if err := ok.Validate(); err != nil {
+		t.Errorf("Validate() with PasswordFile set = %v, want nil", err)
+	}
+
+	missing := base() // neither Password nor PasswordFile
+	if err := missing.Validate(); err == nil {
+		t.Error("Validate() = nil, want error when neither DB_PASSWORD nor DB_PASSWORD_FILE is set")
+	}
+}
+
 func TestIsDevelopmentProduction(t *testing.T) {
 	tests := []struct {
 		env    string
