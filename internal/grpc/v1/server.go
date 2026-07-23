@@ -40,10 +40,11 @@ func (s *Server) SendEmail(
 	req *notificationv1.SendEmailRequest,
 ) (*notificationv1.SendEmailResponse, error) {
 	n, err := s.svc.SendEmail(ctx, domain.SendEmailRequest{
-		UserID:  int(req.GetUserId()),
-		To:      req.GetTo(),
-		Subject: req.GetSubject(),
-		Body:    req.GetBody(),
+		UserID:      int(req.GetUserId()),
+		To:          req.GetTo(),
+		Subject:     req.GetSubject(),
+		Body:        req.GetBody(),
+		DeliveryKey: req.GetDeliveryKey(),
 	})
 	if err != nil {
 		if errors.Is(err, logicv1.ErrInvalidRecipient) {

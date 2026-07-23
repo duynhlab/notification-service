@@ -48,7 +48,23 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 		Title:   req.Subject,
 	}
 
-	// Insert using repository
+	// Insert using repository. With a delivery key the write is idempotent:
+	// a retried send (e.g. a Temporal activity retry) replays the original
+	// row instead of creating a duplicate inbox entry.
+	if req.DeliveryKey != "" {
+		replayed, err := s.repo.CreateWithDeliveryKey(ctx, notification, req.UserID, req.DeliveryKey)
+		if err != nil {
+			span.RecordError(err)
+			return nil, fmt.Errorf("create notification: %w", err)
+		}
+		span.SetAttributes(
+			attribute.Bool("email.sent", !replayed),
+			attribute.Bool("email.replayed", replayed),
+		)
+		span.AddEvent("notification.email.sent")
+		return notification, nil
+	}
+
 	err := s.repo.Create(ctx, notification, req.UserID)
 	if err != nil {
 		span.RecordError(err)

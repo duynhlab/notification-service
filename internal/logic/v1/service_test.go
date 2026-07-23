@@ -12,6 +12,7 @@ import (
 type mockRepo struct {
 	createErr error
 	createFn  func(n *domain.Notification, userID int)
+	replayed  bool
 
 	findByID    *domain.Notification
 	findByIDErr error
@@ -37,6 +38,13 @@ func (m *mockRepo) Create(_ context.Context, n *domain.Notification, userID int)
 		m.createFn(n, userID)
 	}
 	return m.createErr
+}
+
+func (m *mockRepo) CreateWithDeliveryKey(_ context.Context, n *domain.Notification, userID int, _ string) (bool, error) {
+	if m.createFn != nil {
+		m.createFn(n, userID)
+	}
+	return m.replayed, m.createErr
 }
 
 func (m *mockRepo) FindByID(_ context.Context, _, _ int) (*domain.Notification, error) {
@@ -130,6 +138,51 @@ func TestSendEmail(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSendEmailDeliveryKey(t *testing.T) {
+	t.Run("with key uses idempotent path", func(t *testing.T) {
+		var gotUserID int
+		repo := &mockRepo{createFn: func(n *domain.Notification, userID int) {
+			gotUserID = userID
+			n.ID = "7"
+		}}
+		svc := NewNotificationService(repo)
+		n, err := svc.SendEmail(context.Background(), domain.SendEmailRequest{
+			UserID: 42, To: "a@b.dev", Subject: "s", Body: "b",
+			DeliveryKey: "order:42:type:order_confirmed:version:1",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if gotUserID != 42 || n.ID != "7" {
+			t.Fatalf("idempotent path not used: userID=%d id=%q", gotUserID, n.ID)
+		}
+	})
+
+	t.Run("replayed send returns original row", func(t *testing.T) {
+		repo := &mockRepo{replayed: true, createFn: func(n *domain.Notification, _ int) { n.ID = "7" }}
+		svc := NewNotificationService(repo)
+		n, err := svc.SendEmail(context.Background(), domain.SendEmailRequest{
+			UserID: 42, To: "a@b.dev", Subject: "s", Body: "b", DeliveryKey: "k",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if n.ID != "7" {
+			t.Fatalf("replay did not return original row: id=%q", n.ID)
+		}
+	})
+
+	t.Run("repository error surfaces", func(t *testing.T) {
+		repo := &mockRepo{createErr: errRepo}
+		svc := NewNotificationService(repo)
+		if _, err := svc.SendEmail(context.Background(), domain.SendEmailRequest{
+			UserID: 42, To: "a@b.dev", Subject: "s", Body: "b", DeliveryKey: "k",
+		}); err == nil {
+			t.Fatal("want error")
+		}
+	})
 }
 
 func TestSendSMS(t *testing.T) {
