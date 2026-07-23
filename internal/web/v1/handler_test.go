@@ -41,6 +41,9 @@ type mockRepo struct {
 func (m *mockRepo) Create(_ context.Context, _ *domain.Notification, _ int) error {
 	return m.createErr
 }
+func (m *mockRepo) CreateWithDeliveryKey(_ context.Context, _ *domain.Notification, _ int, _ string) (bool, error) {
+	return false, m.createErr
+}
 func (m *mockRepo) FindByID(_ context.Context, _, _ int) (*domain.Notification, error) {
 	return m.findByID, m.findByIDErr
 }

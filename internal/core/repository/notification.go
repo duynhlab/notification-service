@@ -15,6 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// statusSent is the only stored notification status today: rows exist because
+// a send happened. A real provider pipeline would add pending/failed states.
+const statusSent = "sent"
+
 // NotificationRepository is the pgx-backed implementation of
 // domain.NotificationRepository.
 type NotificationRepository struct {
@@ -70,9 +74,72 @@ func (r *NotificationRepository) Create(ctx context.Context, notification *domai
 	notification.ID = strconv.Itoa(id)
 	notification.CreatedAt = createdAt.Format(time.RFC3339)
 	notification.Read = false
-	notification.Status = "sent" // Default status
+	notification.Status = statusSent // Default status
 
 	return nil
+}
+
+// CreateWithDeliveryKey inserts a notification deduplicated on deliveryKey.
+// The partial unique index on delivery_key makes the insert race-safe: exactly
+// one of two concurrent sends with the same key inserts; the loser loads the
+// winner's row (replay) so retries converge on one notification.
+func (r *NotificationRepository) CreateWithDeliveryKey(
+	ctx context.Context,
+	notification *domain.Notification,
+	userID int,
+	deliveryKey string,
+) (bool, error) {
+	// Mirror Create's title/message fallback so both paths persist identically.
+	title := notification.Title
+	if title == "" {
+		title = notification.Message
+	}
+	message := notification.Message
+	if message == "" {
+		message = title
+	}
+
+	insert := `INSERT INTO notifications (user_id, title, message, type, read, delivery_key)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (delivery_key) WHERE delivery_key IS NOT NULL DO NOTHING
+		RETURNING id, created_at`
+	var id int
+	var createdAt time.Time
+	err := r.pool.QueryRow(ctx, insert, userID, title, message, notification.Type, false, deliveryKey).
+		Scan(&id, &createdAt)
+	switch {
+	case err == nil:
+		notification.ID = strconv.Itoa(id)
+		notification.CreatedAt = createdAt.Format(time.RFC3339)
+		notification.Read = false
+		notification.Status = statusSent
+		return false, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return false, fmt.Errorf("insert notification with delivery key: %w", err)
+	}
+
+	// Conflict: replay the original row.
+	var read bool
+	var storedTitle, storedMessage, storedType *string
+	query := `SELECT id, title, message, type, read, created_at FROM notifications WHERE delivery_key = $1`
+	if err := r.pool.QueryRow(ctx, query, deliveryKey).
+		Scan(&id, &storedTitle, &storedMessage, &storedType, &read, &createdAt); err != nil {
+		return false, fmt.Errorf("load notification by delivery key: %w", err)
+	}
+	notification.ID = strconv.Itoa(id)
+	if storedTitle != nil {
+		notification.Title = *storedTitle
+	}
+	if storedMessage != nil {
+		notification.Message = *storedMessage
+	}
+	if storedType != nil {
+		notification.Type = *storedType
+	}
+	notification.Read = read
+	notification.CreatedAt = createdAt.Format(time.RFC3339)
+	notification.Status = statusSent
+	return true, nil
 }
 
 // FindByID retrieves a notification by its ID, scoped to the owning user.

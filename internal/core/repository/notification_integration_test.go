@@ -123,6 +123,51 @@ func TestNotificationRepository_Integration(t *testing.T) {
 		}
 	})
 
+	t.Run("CreateWithDeliveryKey deduplicates on the key", func(t *testing.T) {
+		// Own user so the rows don't skew the count/list assertions below,
+		// which assume userID has exactly one notification (998 is bulkUser).
+		const userID = 997
+		const key = "order:42:type:order_confirmed:version:1"
+		first := &domain.Notification{Type: "email", Title: "Confirmed", Message: "Order 42"}
+		replayed, err := repo.CreateWithDeliveryKey(ctx, first, userID, key)
+		if err != nil {
+			t.Fatalf("CreateWithDeliveryKey: %v", err)
+		}
+		if replayed {
+			t.Fatal("first send must not be a replay")
+		}
+
+		second := &domain.Notification{Type: "email", Title: "Confirmed", Message: "Order 42"}
+		replayed, err = repo.CreateWithDeliveryKey(ctx, second, userID, key)
+		if err != nil {
+			t.Fatalf("CreateWithDeliveryKey retry: %v", err)
+		}
+		if !replayed {
+			t.Fatal("retry with the same key must replay")
+		}
+		if second.ID != first.ID {
+			t.Fatalf("replay returned id %q, want original %q", second.ID, first.ID)
+		}
+
+		var count int
+		if err := pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM notifications WHERE delivery_key = $1`, key).Scan(&count); err != nil {
+			t.Fatalf("count by delivery_key: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("rows with key = %d, want exactly 1", count)
+		}
+
+		third := &domain.Notification{Type: "email", Title: "Receipt", Message: "Order 42"}
+		replayed, err = repo.CreateWithDeliveryKey(ctx, third, userID, "order:42:type:receipt:version:1")
+		if err != nil {
+			t.Fatalf("CreateWithDeliveryKey distinct key: %v", err)
+		}
+		if replayed || third.ID == first.ID {
+			t.Fatalf("distinct key must insert a new row (replayed=%v id=%q)", replayed, third.ID)
+		}
+	})
+
 	t.Run("FindByID returns the created row", func(t *testing.T) {
 		got, err := repo.FindByID(ctx, createdID, userID)
 		if err != nil {
