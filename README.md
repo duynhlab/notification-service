@@ -26,7 +26,8 @@ The service exposes two listeners:
   Built via the shared `pkg/grpcx` bootstrap (OpenTelemetry interceptors, health,
   reflection).
 - No gRPC client: JWTs are verified locally via the shared `pkg/authmw` JWKS
-  verifier (`AUTH_JWKS_URL`) — no per-request call to auth.
+  verifier against the Keycloak realm (`OIDC_ISSUER`) — no per-request call to
+  an identity service.
 
 ## API Endpoints
 
@@ -86,7 +87,9 @@ env vars take precedence). Key variables:
 | `PORT` | `8080` | HTTP listen port |
 | `GRPC_PORT` | `9090` | gRPC listen port |
 | `ENV` | `development` | `development`/`staging`/`production` |
-| `AUTH_JWKS_URL` | `http://auth.auth.svc.cluster.local:8080/auth/v1/public/auth/jwks` | Auth JWKS endpoint (local JWT verification) |
+| `OIDC_ISSUER` | `https://id.duynh.me/realms/duynhlab` | Expected OIDC issuer (Keycloak realm) |
+| `OIDC_AUDIENCE` | `duynhlab-platform` | Expected OIDC audience |
+| `OIDC_JWKS_URL` | _(empty — derived from issuer)_ | Optional JWKS endpoint override |
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | — | PostgreSQL connection |
 | `DB_SSLMODE` | `disable` | PostgreSQL SSL mode |
 | `DB_POOL_MAX_CONNECTIONS` | `25` | pgx pool max conns |

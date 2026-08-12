@@ -118,7 +118,8 @@ interceptors, health, reflection).
   `SendSMS`) on `:9090`. `SendEmail` is called best-effort by `order-service` on
   checkout. Impl in `internal/grpc/v1/server.go`.
 - No gRPC client: JWTs are verified locally via the shared `pkg/authmw` JWKS
-  verifier (`AUTH_JWKS_URL`) — no per-request call to auth.
+  verifier against the Keycloak realm (`OIDC_ISSUER`) — no per-request call to
+  an identity service.
 
 ### API endpoints
 

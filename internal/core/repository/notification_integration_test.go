@@ -102,7 +102,8 @@ func TestNotificationRepository_Integration(t *testing.T) {
 	pool := newTestDB(t)
 	repo := NewNotificationRepository(pool)
 	ctx := context.Background()
-	const userID = 999 // not present in the seed data
+	// userID is an opaque OIDC token subject (ADR-042), not present in the seed data.
+	const userID = "17e57000-0000-4000-8000-000000000999"
 
 	var createdID int
 
@@ -125,8 +126,8 @@ func TestNotificationRepository_Integration(t *testing.T) {
 
 	t.Run("CreateWithDeliveryKey deduplicates on the key", func(t *testing.T) {
 		// Own user so the rows don't skew the count/list assertions below,
-		// which assume userID has exactly one notification (998 is bulkUser).
-		const userID = 997
+		// which assume userID has exactly one notification (…998 is bulkUser).
+		const userID = "17e57000-0000-4000-8000-000000000997"
 		const key = "order:42:type:order_confirmed:version:1"
 		first := &domain.Notification{Type: "email", Title: "Confirmed", Message: "Order 42"}
 		replayed, err := repo.CreateWithDeliveryKey(ctx, first, userID, key)
@@ -234,7 +235,7 @@ func TestNotificationRepository_Integration(t *testing.T) {
 	})
 
 	t.Run("MarkAllByUserID flips every unread row and is idempotent", func(t *testing.T) {
-		const bulkUser = 998 // isolated from the userID rows above
+		const bulkUser = "17e57000-0000-4000-8000-000000000998" // isolated from the userID rows above
 		for i := 0; i < 3; i++ {
 			if err := repo.Create(ctx, &domain.Notification{Message: "bulk"}, bulkUser); err != nil {
 				t.Fatalf("Create: %v", err)

@@ -31,7 +31,7 @@ func NewNotificationRepository(pool *pgxpool.Pool) domain.NotificationRepository
 }
 
 // CountUnreadByUserID returns the count of unread notifications for a user.
-func (r *NotificationRepository) CountUnreadByUserID(ctx context.Context, userID int) (int, error) {
+func (r *NotificationRepository) CountUnreadByUserID(ctx context.Context, userID string) (int, error) {
 	var count int
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND read = false`, userID).Scan(&count)
 	if err != nil {
@@ -41,7 +41,7 @@ func (r *NotificationRepository) CountUnreadByUserID(ctx context.Context, userID
 }
 
 // CountByUserID returns the total number of notifications for a user (for pagination).
-func (r *NotificationRepository) CountByUserID(ctx context.Context, userID int) (int, error) {
+func (r *NotificationRepository) CountByUserID(ctx context.Context, userID string) (int, error) {
 	var count int
 	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE user_id = $1`, userID).Scan(&count)
 	if err != nil {
@@ -51,7 +51,7 @@ func (r *NotificationRepository) CountByUserID(ctx context.Context, userID int) 
 }
 
 // Create inserts a new notification into the database.
-func (r *NotificationRepository) Create(ctx context.Context, notification *domain.Notification, userID int) error {
+func (r *NotificationRepository) Create(ctx context.Context, notification *domain.Notification, userID string) error {
 	query := `INSERT INTO notifications (user_id, title, message, type, read) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`
 	var id int
 	var createdAt time.Time
@@ -86,7 +86,7 @@ func (r *NotificationRepository) Create(ctx context.Context, notification *domai
 func (r *NotificationRepository) CreateWithDeliveryKey(
 	ctx context.Context,
 	notification *domain.Notification,
-	userID int,
+	userID string,
 	deliveryKey string,
 ) (bool, error) {
 	// Mirror Create's title/message fallback so both paths persist identically.
@@ -143,9 +143,10 @@ func (r *NotificationRepository) CreateWithDeliveryKey(
 }
 
 // FindByID retrieves a notification by its ID, scoped to the owning user.
-func (r *NotificationRepository) FindByID(ctx context.Context, id, userID int) (*domain.Notification, error) {
+func (r *NotificationRepository) FindByID(ctx context.Context, id int, userID string) (*domain.Notification, error) {
 	query := `SELECT id, user_id, title, message, type, read, created_at FROM notifications WHERE id = $1 AND user_id = $2`
-	var notificationID, ownerID int
+	var notificationID int
+	var ownerID string
 	var title, message, notifType *string
 	var read bool
 	var createdAt time.Time
@@ -185,7 +186,7 @@ func (r *NotificationRepository) FindByID(ctx context.Context, id, userID int) (
 }
 
 // ListByUserID retrieves a page of notifications for a specific user, newest first.
-func (r *NotificationRepository) ListByUserID(ctx context.Context, userID, limit, offset int) ([]domain.Notification, error) {
+func (r *NotificationRepository) ListByUserID(ctx context.Context, userID string, limit, offset int) ([]domain.Notification, error) {
 	query := `SELECT id, user_id, title, message, type, read, created_at FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
 	rows, err := r.pool.Query(ctx, query, userID, limit, offset)
 	if err != nil {
@@ -195,7 +196,8 @@ func (r *NotificationRepository) ListByUserID(ctx context.Context, userID, limit
 
 	var notifications []domain.Notification
 	for rows.Next() {
-		var notificationID, dbUserID int
+		var notificationID int
+		var dbUserID string
 		var title, message, notifType *string
 		var read bool
 		var createdAt time.Time
@@ -240,7 +242,7 @@ func (r *NotificationRepository) ListByUserID(ctx context.Context, userID, limit
 
 // MarkAsRead marks a notification as read, scoped to the owning user.
 // Returns true if updated, false if not found (or not owned by the user).
-func (r *NotificationRepository) MarkAsRead(ctx context.Context, id, userID int) (bool, error) {
+func (r *NotificationRepository) MarkAsRead(ctx context.Context, id int, userID string) (bool, error) {
 	query := `UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2`
 	result, err := r.pool.Exec(ctx, query, id, userID)
 	if err != nil {
@@ -251,7 +253,7 @@ func (r *NotificationRepository) MarkAsRead(ctx context.Context, id, userID int)
 
 // MarkAllByUserID marks every unread notification for a user as read and returns
 // how many rows were flipped. Idempotent: a second call affects zero rows.
-func (r *NotificationRepository) MarkAllByUserID(ctx context.Context, userID int) (int, error) {
+func (r *NotificationRepository) MarkAllByUserID(ctx context.Context, userID string) (int, error) {
 	query := `UPDATE notifications SET read = true WHERE user_id = $1 AND read = false`
 	result, err := r.pool.Exec(ctx, query, userID)
 	if err != nil {

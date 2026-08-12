@@ -2,18 +2,20 @@ package domain
 
 import "context"
 
+// NotificationRepository persists notifications. userID is the OIDC token
+// subject — an opaque string (ADR-042), never parsed or compared numerically.
 type NotificationRepository interface {
-	Create(ctx context.Context, notification *Notification, userID int) error
+	Create(ctx context.Context, notification *Notification, userID string) error
 	// CreateWithDeliveryKey inserts a notification deduplicated on deliveryKey:
 	// a retried send with the same key loads the original row into notification
 	// instead of inserting a duplicate. It reports whether the row was replayed.
-	CreateWithDeliveryKey(ctx context.Context, notification *Notification, userID int, deliveryKey string) (replayed bool, err error)
-	FindByID(ctx context.Context, id, userID int) (*Notification, error)
-	ListByUserID(ctx context.Context, userID, limit, offset int) ([]Notification, error)
-	MarkAsRead(ctx context.Context, id, userID int) (bool, error)
-	MarkAllByUserID(ctx context.Context, userID int) (int, error)
-	CountUnreadByUserID(ctx context.Context, userID int) (int, error)
-	CountByUserID(ctx context.Context, userID int) (int, error)
+	CreateWithDeliveryKey(ctx context.Context, notification *Notification, userID, deliveryKey string) (replayed bool, err error)
+	FindByID(ctx context.Context, id int, userID string) (*Notification, error)
+	ListByUserID(ctx context.Context, userID string, limit, offset int) ([]Notification, error)
+	MarkAsRead(ctx context.Context, id int, userID string) (bool, error)
+	MarkAllByUserID(ctx context.Context, userID string) (int, error)
+	CountUnreadByUserID(ctx context.Context, userID string) (int, error)
+	CountByUserID(ctx context.Context, userID string) (int, error)
 }
 
 type Notification struct {
@@ -27,7 +29,8 @@ type Notification struct {
 }
 
 type SendEmailRequest struct {
-	UserID  int    `json:"user_id" binding:"required"`
+	// UserID is the OIDC token subject — an opaque string (ADR-042).
+	UserID  string `json:"user_id" binding:"required"`
 	To      string `json:"to" binding:"required,email"`
 	Subject string `json:"subject" binding:"required"`
 	Body    string `json:"body" binding:"required"`
@@ -38,7 +41,8 @@ type SendEmailRequest struct {
 }
 
 type SendSMSRequest struct {
-	UserID  int    `json:"user_id" binding:"required"`
+	// UserID is the OIDC token subject — an opaque string (ADR-042).
+	UserID  string `json:"user_id" binding:"required"`
 	To      string `json:"to" binding:"required"`
 	Message string `json:"message" binding:"required"`
 }

@@ -127,9 +127,13 @@ func main() {
 	service := logicv1.NewNotificationService(repo)
 	handler := webv1.NewHandler(service)
 
-	// Local JWT verification via JWKS — the only auth path (no gRPC fallback),
-	// so a verifier failure is fatal.
-	verifier, err := authmw.NewVerifier(cfg.JWKSURL, cfg.JWTIssuer, cfg.JWTAudience)
+	// Local JWT verification against the Keycloak realm JWKS — the only auth
+	// path (no gRPC fallback), so a verifier failure is fatal.
+	verifier, err := authmw.NewVerifier(authmw.Config{
+		Issuer:   cfg.OIDCIssuer,
+		Audience: cfg.OIDCAudience,
+		JWKSURL:  cfg.OIDCJWKSURL,
+	})
 	if err != nil {
 		logger.Fatal("Failed to initialize JWT verifier", zap.Error(err))
 	}
