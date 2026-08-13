@@ -33,8 +33,31 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Database.MaxConnections != 25 {
 		t.Errorf("default MaxConnections = %d, want 25", cfg.Database.MaxConnections)
 	}
-	if want := "http://auth.auth.svc.cluster.local:8080/auth/v1/public/auth/jwks"; cfg.JWKSURL != want {
-		t.Errorf("default JWKSURL = %q, want %q", cfg.JWKSURL, want)
+	if want := "https://id.duynh.me/realms/duynhlab"; cfg.OIDCIssuer != want {
+		t.Errorf("default OIDCIssuer = %q, want %q", cfg.OIDCIssuer, want)
+	}
+	if want := "duynhlab-platform"; cfg.OIDCAudience != want {
+		t.Errorf("default OIDCAudience = %q, want %q", cfg.OIDCAudience, want)
+	}
+	if cfg.OIDCJWKSURL != "" {
+		t.Errorf("default OIDCJWKSURL = %q, want empty (derived from issuer)", cfg.OIDCJWKSURL)
+	}
+}
+
+func TestLoad_OIDCOverrides(t *testing.T) {
+	t.Setenv("OIDC_ISSUER", "http://keycloak.local-stack:8081/realms/duynhlab")
+	t.Setenv("OIDC_AUDIENCE", "local-audience")
+	t.Setenv("OIDC_JWKS_URL", "http://keycloak.local-stack:8081/realms/duynhlab/protocol/openid-connect/certs")
+
+	cfg := Load()
+	if want := "http://keycloak.local-stack:8081/realms/duynhlab"; cfg.OIDCIssuer != want {
+		t.Errorf("OIDCIssuer = %q, want %q", cfg.OIDCIssuer, want)
+	}
+	if want := "local-audience"; cfg.OIDCAudience != want {
+		t.Errorf("OIDCAudience = %q, want %q", cfg.OIDCAudience, want)
+	}
+	if want := "http://keycloak.local-stack:8081/realms/duynhlab/protocol/openid-connect/certs"; cfg.OIDCJWKSURL != want {
+		t.Errorf("OIDCJWKSURL = %q, want %q", cfg.OIDCJWKSURL, want)
 	}
 }
 

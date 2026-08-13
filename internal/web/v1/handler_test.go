@@ -38,28 +38,28 @@ type mockRepo struct {
 	totalErr   error
 }
 
-func (m *mockRepo) Create(_ context.Context, _ *domain.Notification, _ int) error {
+func (m *mockRepo) Create(_ context.Context, _ *domain.Notification, _ string) error {
 	return m.createErr
 }
-func (m *mockRepo) CreateWithDeliveryKey(_ context.Context, _ *domain.Notification, _ int, _ string) (bool, error) {
+func (m *mockRepo) CreateWithDeliveryKey(_ context.Context, _ *domain.Notification, _, _ string) (bool, error) {
 	return false, m.createErr
 }
-func (m *mockRepo) FindByID(_ context.Context, _, _ int) (*domain.Notification, error) {
+func (m *mockRepo) FindByID(_ context.Context, _ int, _ string) (*domain.Notification, error) {
 	return m.findByID, m.findByIDErr
 }
-func (m *mockRepo) ListByUserID(_ context.Context, _, _, _ int) ([]domain.Notification, error) {
+func (m *mockRepo) ListByUserID(_ context.Context, _ string, _, _ int) ([]domain.Notification, error) {
 	return m.listResult, m.listErr
 }
-func (m *mockRepo) MarkAsRead(_ context.Context, _, _ int) (bool, error) {
+func (m *mockRepo) MarkAsRead(_ context.Context, _ int, _ string) (bool, error) {
 	return m.markUpdated, m.markErr
 }
-func (m *mockRepo) MarkAllByUserID(_ context.Context, _ int) (int, error) {
+func (m *mockRepo) MarkAllByUserID(_ context.Context, _ string) (int, error) {
 	return m.markAllCount, m.markAllErr
 }
-func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ int) (int, error) {
+func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ string) (int, error) {
 	return m.unreadCount, m.unreadErr
 }
-func (m *mockRepo) CountByUserID(_ context.Context, _ int) (int, error) {
+func (m *mockRepo) CountByUserID(_ context.Context, _ string) (int, error) {
 	return m.totalCount, m.totalErr
 }
 
@@ -250,7 +250,7 @@ func TestMarkAllAsRead_Success(t *testing.T) {
 
 func TestSendEmail_Success(t *testing.T) {
 	c, rec := ctxWithBody(http.MethodPost, "/notification/v1/internal/email", "",
-		`{"user_id":1,"to":"a@b.com","subject":"Hi","body":"Body"}`)
+		`{"user_id":"a11ce000-0000-4000-8000-000000000001","to":"a@b.com","subject":"Hi","body":"Body"}`)
 	newHandler(&mockRepo{}).SendEmail(c)
 
 	if rec.Code != http.StatusOK {
@@ -276,7 +276,7 @@ func TestSendEmail_InvalidBody(t *testing.T) {
 func TestSendEmail_InvalidRecipient(t *testing.T) {
 	// Missing/invalid email fails request binding (binding:"required,email").
 	c, rec := ctxWithBody(http.MethodPost, "/notification/v1/internal/email", "",
-		`{"user_id":1,"to":"not-an-email","subject":"Hi","body":"Body"}`)
+		`{"user_id":"a11ce000-0000-4000-8000-000000000001","to":"not-an-email","subject":"Hi","body":"Body"}`)
 	newHandler(&mockRepo{}).SendEmail(c)
 
 	if rec.Code != http.StatusBadRequest {
@@ -289,7 +289,7 @@ func TestSendEmail_InvalidRecipient(t *testing.T) {
 
 func TestSendEmail_ServiceError(t *testing.T) {
 	c, rec := ctxWithBody(http.MethodPost, "/notification/v1/internal/email", "",
-		`{"user_id":1,"to":"a@b.com","subject":"Hi","body":"Body"}`)
+		`{"user_id":"a11ce000-0000-4000-8000-000000000001","to":"a@b.com","subject":"Hi","body":"Body"}`)
 	newHandler(&mockRepo{createErr: context.DeadlineExceeded}).SendEmail(c)
 
 	if rec.Code != http.StatusInternalServerError {
@@ -299,7 +299,7 @@ func TestSendEmail_ServiceError(t *testing.T) {
 
 func TestSendSMS_Success(t *testing.T) {
 	c, rec := ctxWithBody(http.MethodPost, "/notification/v1/internal/sms", "",
-		`{"user_id":1,"to":"+15551234","message":"hello"}`)
+		`{"user_id":"a11ce000-0000-4000-8000-000000000001","to":"+15551234","message":"hello"}`)
 	newHandler(&mockRepo{}).SendSMS(c)
 
 	if rec.Code != http.StatusOK {
@@ -324,7 +324,7 @@ func TestSendSMS_InvalidBody(t *testing.T) {
 
 func TestSendSMS_ServiceError(t *testing.T) {
 	c, rec := ctxWithBody(http.MethodPost, "/notification/v1/internal/sms", "",
-		`{"user_id":1,"to":"+15551234","message":"hello"}`)
+		`{"user_id":"a11ce000-0000-4000-8000-000000000001","to":"+15551234","message":"hello"}`)
 	newHandler(&mockRepo{createErr: context.DeadlineExceeded}).SendSMS(c)
 
 	if rec.Code != http.StatusInternalServerError {

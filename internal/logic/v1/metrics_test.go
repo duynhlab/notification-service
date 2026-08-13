@@ -130,18 +130,18 @@ func TestBusinessMetrics(t *testing.T) {
 	}
 
 	// send.duration: one email send and one sms send each record one sample.
-	if _, err := NewNotificationService(&mockRepo{}).SendEmail(ctx, domain.SendEmailRequest{UserID: 1, To: "a@b.com", Subject: "Hi", Body: "Body"}); err != nil {
+	if _, err := NewNotificationService(&mockRepo{}).SendEmail(ctx, domain.SendEmailRequest{UserID: aliceSub, To: "a@b.com", Subject: "Hi", Body: "Body"}); err != nil {
 		t.Fatalf("SendEmail: %v", err)
 	}
-	if _, err := NewNotificationService(&mockRepo{}).SendSMS(ctx, domain.SendSMSRequest{UserID: 1, To: "+1555", Message: "hello"}); err != nil {
+	if _, err := NewNotificationService(&mockRepo{}).SendSMS(ctx, domain.SendSMSRequest{UserID: aliceSub, To: "+1555", Message: "hello"}); err != nil {
 		t.Fatalf("SendSMS: %v", err)
 	}
 	// A send that fails at persistence still took time and is recorded.
-	if _, err := NewNotificationService(&mockRepo{createErr: errRepo}).SendEmail(ctx, domain.SendEmailRequest{UserID: 1, To: "a@b.com", Subject: "Hi"}); err == nil {
+	if _, err := NewNotificationService(&mockRepo{createErr: errRepo}).SendEmail(ctx, domain.SendEmailRequest{UserID: aliceSub, To: "a@b.com", Subject: "Hi"}); err == nil {
 		t.Fatal("expected repo error from SendEmail")
 	}
 	// A rejected recipient is a bad request, not a send, and must NOT be timed.
-	if _, err := NewNotificationService(&mockRepo{}).SendEmail(ctx, domain.SendEmailRequest{UserID: 1, To: "bad", Subject: "Hi"}); err == nil {
+	if _, err := NewNotificationService(&mockRepo{}).SendEmail(ctx, domain.SendEmailRequest{UserID: aliceSub, To: "bad", Subject: "Hi"}); err == nil {
 		t.Fatal("expected invalid-recipient error")
 	}
 

@@ -40,7 +40,7 @@ func (s *Server) SendEmail(
 	req *notificationv1.SendEmailRequest,
 ) (*notificationv1.SendEmailResponse, error) {
 	n, err := s.svc.SendEmail(ctx, domain.SendEmailRequest{
-		UserID:      int(req.GetUserId()),
+		UserID:      req.GetUserId(),
 		To:          req.GetTo(),
 		Subject:     req.GetSubject(),
 		Body:        req.GetBody(),
@@ -63,7 +63,7 @@ func (s *Server) SendSMS(
 	req *notificationv1.SendSMSRequest,
 ) (*notificationv1.SendSMSResponse, error) {
 	n, err := s.svc.SendSMS(ctx, domain.SendSMSRequest{
-		UserID:  int(req.GetUserId()),
+		UserID:  req.GetUserId(),
 		To:      req.GetTo(),
 		Message: req.GetMessage(),
 	})
