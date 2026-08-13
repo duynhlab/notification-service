@@ -4,7 +4,7 @@
 -- Notifications table
 CREATE TABLE IF NOT EXISTS notifications (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,  -- References auth.users.id (cross-cluster, no FK)
+    user_id VARCHAR(255) NOT NULL,  -- OIDC token subject (Keycloak `sub`), opaque string (ADR-042; cross-cluster, no FK)
     title VARCHAR(255) NOT NULL,
     message TEXT,
     type VARCHAR(50),

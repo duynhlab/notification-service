@@ -123,20 +123,20 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 	))
 	defer span.End()
 
-	uid, err := strconv.Atoi(userID)
-	if err != nil || uid <= 0 {
-		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+	// userID is the OIDC token subject — opaque, so only emptiness is invalid.
+	if userID == "" {
+		invalidErr := fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
 		span.RecordError(invalidErr)
 		return nil, 0, invalidErr
 	}
 
-	total, err := s.repo.CountByUserID(ctx, uid)
+	total, err := s.repo.CountByUserID(ctx, userID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, 0, err
 	}
 
-	notifications, err := s.repo.ListByUserID(ctx, uid, limit, offset)
+	notifications, err := s.repo.ListByUserID(ctx, userID, limit, offset)
 	if err != nil {
 		span.RecordError(err)
 		return nil, 0, err
@@ -165,14 +165,14 @@ func (s *NotificationService) GetNotification(ctx context.Context, id, userID st
 		return nil, fmt.Errorf("invalid notification id %q: %w", id, ErrNotificationNotFound)
 	}
 
-	uid, err := strconv.Atoi(userID)
-	if err != nil || uid <= 0 {
-		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+	// userID is the OIDC token subject — opaque, so only emptiness is invalid.
+	if userID == "" {
+		invalidErr := fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
 		span.RecordError(invalidErr)
 		return nil, invalidErr
 	}
 
-	notification, err := s.repo.FindByID(ctx, notificationID, uid)
+	notification, err := s.repo.FindByID(ctx, notificationID, userID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -202,14 +202,14 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 		return nil, fmt.Errorf("invalid notification id %q: %w", id, ErrNotificationNotFound)
 	}
 
-	uid, err := strconv.Atoi(userID)
-	if err != nil || uid <= 0 {
-		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
+	// userID is the OIDC token subject — opaque, so only emptiness is invalid.
+	if userID == "" {
+		invalidErr := fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
 		span.RecordError(invalidErr)
 		return nil, invalidErr
 	}
 
-	updated, err := s.repo.MarkAsRead(ctx, notificationID, uid)
+	updated, err := s.repo.MarkAsRead(ctx, notificationID, userID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, err
@@ -229,7 +229,7 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 // userScopedCount validates the user_id and runs a user-scoped action returning
 // an integer (unread count, rows marked, …). Shared by the count-style methods so
 // the validation + tracing live in one place.
-func (s *NotificationService) userScopedCount(ctx context.Context, userID, spanName string, action func(context.Context, int) (int, error)) (int, error) {
+func (s *NotificationService) userScopedCount(ctx context.Context, userID, spanName string, action func(context.Context, string) (int, error)) (int, error) {
 	ctx, span := middleware.StartSpan(ctx, spanName, trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
@@ -237,18 +237,13 @@ func (s *NotificationService) userScopedCount(ctx context.Context, userID, spanN
 	))
 	defer span.End()
 
-	// Security: Validate userID - reject empty or invalid input
+	// Security: userID is the OIDC token subject — opaque, so only emptiness
+	// is invalid.
 	if userID == "" {
 		return 0, fmt.Errorf("user_id is required: %w", ErrInvalidUserID)
 	}
-	uid, err := strconv.Atoi(userID)
-	if err != nil || uid <= 0 {
-		invalidErr := fmt.Errorf("invalid user_id %q: %w", userID, ErrInvalidUserID)
-		span.RecordError(invalidErr)
-		return 0, invalidErr
-	}
 
-	n, err := action(ctx, uid)
+	n, err := action(ctx, userID)
 	if err != nil {
 		span.RecordError(err)
 		return 0, err

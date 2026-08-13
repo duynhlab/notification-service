@@ -35,8 +35,8 @@ var (
 	// HTTP Status: 403 Forbidden
 	ErrUnauthorized = errors.New("unauthorized access")
 
-	// ErrInvalidUserID indicates the supplied user id is missing or cannot be
-	// parsed into a positive integer.
+	// ErrInvalidUserID indicates the supplied user id (the OIDC token subject,
+	// an opaque string) is missing.
 	// HTTP Status: 400 Bad Request
 	ErrInvalidUserID = errors.New("invalid user_id")
 )

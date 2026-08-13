@@ -12,18 +12,28 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// sendStub is a configurable Notifier double.
+// sendStub is a configurable Notifier double. It records the last request so
+// tests can assert what the adapter forwarded to the logic layer.
 type sendStub struct {
 	result *domain.Notification
 	err    error
+
+	gotEmail domain.SendEmailRequest
+	gotSMS   domain.SendSMSRequest
 }
 
-func (s *sendStub) SendEmail(_ context.Context, _ domain.SendEmailRequest) (*domain.Notification, error) {
+func (s *sendStub) SendEmail(_ context.Context, req domain.SendEmailRequest) (*domain.Notification, error) {
+	s.gotEmail = req
 	return s.result, s.err
 }
-func (s *sendStub) SendSMS(_ context.Context, _ domain.SendSMSRequest) (*domain.Notification, error) {
+func (s *sendStub) SendSMS(_ context.Context, req domain.SendSMSRequest) (*domain.Notification, error) {
+	s.gotSMS = req
 	return s.result, s.err
 }
+
+// aliceSub is the fixed Keycloak subject of the demo user alice (ADR-042):
+// user_id is the OIDC token subject, an opaque string.
+const aliceSub = "a11ce000-0000-4000-8000-000000000001"
 
 func sample() *domain.Notification {
 	return &domain.Notification{
@@ -34,12 +44,16 @@ func sample() *domain.Notification {
 
 func TestServer_SendEmail(t *testing.T) {
 	t.Run("success maps domain to proto", func(t *testing.T) {
-		srv := NewServer(&sendStub{result: sample()})
+		stub := &sendStub{result: sample()}
+		srv := NewServer(stub)
 		resp, err := srv.SendEmail(context.Background(), &notificationv1.SendEmailRequest{
-			UserId: 1, To: "a@b.com", Subject: "Hi", Body: "Body",
+			UserId: aliceSub, To: "a@b.com", Subject: "Hi", Body: "Body",
 		})
 		if err != nil {
 			t.Fatalf("got error %v, want nil", err)
+		}
+		if stub.gotEmail.UserID != aliceSub {
+			t.Errorf("forwarded UserID = %q, want the opaque subject %q", stub.gotEmail.UserID, aliceSub)
 		}
 		n := resp.GetNotification()
 		if n.GetId() != "5" || n.GetType() != "email" || n.GetTitle() != "Hi" {
@@ -72,15 +86,19 @@ func TestServer_SendEmail(t *testing.T) {
 
 func TestServer_SendSMS(t *testing.T) {
 	t.Run("success maps domain to proto", func(t *testing.T) {
-		srv := NewServer(&sendStub{result: sample()})
+		stub := &sendStub{result: sample()}
+		srv := NewServer(stub)
 		resp, err := srv.SendSMS(context.Background(), &notificationv1.SendSMSRequest{
-			UserId: 1, To: "+123", Message: "hello",
+			UserId: aliceSub, To: "+123", Message: "hello",
 		})
 		if err != nil {
 			t.Fatalf("got error %v, want nil", err)
 		}
 		if resp.GetNotification().GetId() != "5" {
 			t.Errorf("id = %q, want 5", resp.GetNotification().GetId())
+		}
+		if stub.gotSMS.UserID != aliceSub {
+			t.Errorf("forwarded UserID = %q, want the opaque subject %q", stub.gotSMS.UserID, aliceSub)
 		}
 	})
 

@@ -11,7 +11,7 @@ import (
 // mockRepo is a configurable in-memory stub of domain.NotificationRepository.
 type mockRepo struct {
 	createErr error
-	createFn  func(n *domain.Notification, userID int)
+	createFn  func(n *domain.Notification, userID string)
 	replayed  bool
 
 	findByID    *domain.Notification
@@ -33,45 +33,49 @@ type mockRepo struct {
 	totalErr   error
 }
 
-func (m *mockRepo) Create(_ context.Context, n *domain.Notification, userID int) error {
+func (m *mockRepo) Create(_ context.Context, n *domain.Notification, userID string) error {
 	if m.createFn != nil {
 		m.createFn(n, userID)
 	}
 	return m.createErr
 }
 
-func (m *mockRepo) CreateWithDeliveryKey(_ context.Context, n *domain.Notification, userID int, _ string) (bool, error) {
+func (m *mockRepo) CreateWithDeliveryKey(_ context.Context, n *domain.Notification, userID, _ string) (bool, error) {
 	if m.createFn != nil {
 		m.createFn(n, userID)
 	}
 	return m.replayed, m.createErr
 }
 
-func (m *mockRepo) FindByID(_ context.Context, _, _ int) (*domain.Notification, error) {
+func (m *mockRepo) FindByID(_ context.Context, _ int, _ string) (*domain.Notification, error) {
 	return m.findByID, m.findByIDErr
 }
 
-func (m *mockRepo) ListByUserID(_ context.Context, _, _, _ int) ([]domain.Notification, error) {
+func (m *mockRepo) ListByUserID(_ context.Context, _ string, _, _ int) ([]domain.Notification, error) {
 	return m.listResult, m.listErr
 }
 
-func (m *mockRepo) MarkAsRead(_ context.Context, _, _ int) (bool, error) {
+func (m *mockRepo) MarkAsRead(_ context.Context, _ int, _ string) (bool, error) {
 	return m.markUpdated, m.markErr
 }
 
-func (m *mockRepo) MarkAllByUserID(_ context.Context, _ int) (int, error) {
+func (m *mockRepo) MarkAllByUserID(_ context.Context, _ string) (int, error) {
 	return m.markAllCount, m.markAllErr
 }
 
-func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ int) (int, error) {
+func (m *mockRepo) CountUnreadByUserID(_ context.Context, _ string) (int, error) {
 	return m.unreadCount, m.unreadErr
 }
 
-func (m *mockRepo) CountByUserID(_ context.Context, _ int) (int, error) {
+func (m *mockRepo) CountByUserID(_ context.Context, _ string) (int, error) {
 	return m.totalCount, m.totalErr
 }
 
 var errRepo = errors.New("repo failure")
+
+// aliceSub is the fixed Keycloak subject of the demo user alice (ADR-042):
+// user ids are opaque OIDC token subjects, not integers.
+const aliceSub = "a11ce000-0000-4000-8000-000000000001"
 
 func TestSendEmail(t *testing.T) {
 	t.Parallel()
@@ -85,27 +89,27 @@ func TestSendEmail(t *testing.T) {
 	}{
 		{
 			name:    "valid email",
-			req:     domain.SendEmailRequest{UserID: 1, To: "a@b.com", Subject: "Hi", Body: "Body"},
+			req:     domain.SendEmailRequest{UserID: aliceSub, To: "a@b.com", Subject: "Hi", Body: "Body"},
 			repo:    &mockRepo{},
 			wantNil: false,
 		},
 		{
 			name:      "empty recipient",
-			req:       domain.SendEmailRequest{UserID: 1, To: "", Subject: "Hi"},
+			req:       domain.SendEmailRequest{UserID: aliceSub, To: "", Subject: "Hi"},
 			repo:      &mockRepo{},
 			wantErrIs: ErrInvalidRecipient,
 			wantNil:   true,
 		},
 		{
 			name:      "malformed recipient address",
-			req:       domain.SendEmailRequest{UserID: 1, To: "not-an-email", Subject: "Hi"},
+			req:       domain.SendEmailRequest{UserID: aliceSub, To: "not-an-email", Subject: "Hi"},
 			repo:      &mockRepo{},
 			wantErrIs: ErrInvalidRecipient,
 			wantNil:   true,
 		},
 		{
 			name:      "repository error",
-			req:       domain.SendEmailRequest{UserID: 1, To: "a@b.com", Subject: "Hi"},
+			req:       domain.SendEmailRequest{UserID: aliceSub, To: "a@b.com", Subject: "Hi"},
 			repo:      &mockRepo{createErr: errRepo},
 			wantErrIs: errRepo,
 			wantNil:   true,
@@ -142,29 +146,29 @@ func TestSendEmail(t *testing.T) {
 
 func TestSendEmailDeliveryKey(t *testing.T) {
 	t.Run("with key uses idempotent path", func(t *testing.T) {
-		var gotUserID int
-		repo := &mockRepo{createFn: func(n *domain.Notification, userID int) {
+		var gotUserID string
+		repo := &mockRepo{createFn: func(n *domain.Notification, userID string) {
 			gotUserID = userID
 			n.ID = "7"
 		}}
 		svc := NewNotificationService(repo)
 		n, err := svc.SendEmail(context.Background(), domain.SendEmailRequest{
-			UserID: 42, To: "a@b.dev", Subject: "s", Body: "b",
+			UserID: aliceSub, To: "a@b.dev", Subject: "s", Body: "b",
 			DeliveryKey: "order:42:type:order_confirmed:version:1",
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if gotUserID != 42 || n.ID != "7" {
-			t.Fatalf("idempotent path not used: userID=%d id=%q", gotUserID, n.ID)
+		if gotUserID != aliceSub || n.ID != "7" {
+			t.Fatalf("idempotent path not used: userID=%q id=%q", gotUserID, n.ID)
 		}
 	})
 
 	t.Run("replayed send returns original row", func(t *testing.T) {
-		repo := &mockRepo{replayed: true, createFn: func(n *domain.Notification, _ int) { n.ID = "7" }}
+		repo := &mockRepo{replayed: true, createFn: func(n *domain.Notification, _ string) { n.ID = "7" }}
 		svc := NewNotificationService(repo)
 		n, err := svc.SendEmail(context.Background(), domain.SendEmailRequest{
-			UserID: 42, To: "a@b.dev", Subject: "s", Body: "b", DeliveryKey: "k",
+			UserID: aliceSub, To: "a@b.dev", Subject: "s", Body: "b", DeliveryKey: "k",
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -178,7 +182,7 @@ func TestSendEmailDeliveryKey(t *testing.T) {
 		repo := &mockRepo{createErr: errRepo}
 		svc := NewNotificationService(repo)
 		if _, err := svc.SendEmail(context.Background(), domain.SendEmailRequest{
-			UserID: 42, To: "a@b.dev", Subject: "s", Body: "b", DeliveryKey: "k",
+			UserID: aliceSub, To: "a@b.dev", Subject: "s", Body: "b", DeliveryKey: "k",
 		}); err == nil {
 			t.Fatal("want error")
 		}
@@ -197,13 +201,13 @@ func TestSendSMS(t *testing.T) {
 	}{
 		{
 			name:    "valid sms",
-			req:     domain.SendSMSRequest{UserID: 1, To: "+1555", Message: "hello"},
+			req:     domain.SendSMSRequest{UserID: aliceSub, To: "+1555", Message: "hello"},
 			repo:    &mockRepo{},
 			wantNil: false,
 		},
 		{
 			name:      "repository error",
-			req:       domain.SendSMSRequest{UserID: 1, To: "+1555", Message: "hello"},
+			req:       domain.SendSMSRequest{UserID: aliceSub, To: "+1555", Message: "hello"},
 			repo:      &mockRepo{createErr: errRepo},
 			wantErrIs: errRepo,
 			wantNil:   true,
@@ -244,37 +248,32 @@ func TestListNotifications(t *testing.T) {
 	}{
 		{
 			name:    "valid user with results",
-			userID:  "1",
+			userID:  aliceSub,
 			repo:    &mockRepo{listResult: []domain.Notification{{ID: "1"}, {ID: "2"}}},
 			wantLen: 2,
 		},
 		{
 			name:    "valid user nil result normalized to empty",
-			userID:  "1",
+			userID:  aliceSub,
 			repo:    &mockRepo{listResult: nil},
 			wantLen: 0,
 		},
 		{
-			name:      "non-numeric user id",
-			userID:    "abc",
-			repo:      &mockRepo{},
-			wantErrIs: ErrInvalidUserID,
+			// The subject is opaque (ADR-042): non-UUID, non-numeric values pass through.
+			name:    "opaque non-numeric subject accepted",
+			userID:  "service-account-checkout",
+			repo:    &mockRepo{listResult: []domain.Notification{{ID: "1"}}},
+			wantLen: 1,
 		},
 		{
-			name:      "zero user id",
-			userID:    "0",
-			repo:      &mockRepo{},
-			wantErrIs: ErrInvalidUserID,
-		},
-		{
-			name:      "negative user id",
-			userID:    "-5",
+			name:      "empty user id",
+			userID:    "",
 			repo:      &mockRepo{},
 			wantErrIs: ErrInvalidUserID,
 		},
 		{
 			name:      "repository error",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{listErr: errRepo},
 			wantErrIs: errRepo,
 		},
@@ -307,34 +306,34 @@ func TestGetNotification(t *testing.T) {
 		{
 			name:   "found",
 			id:     "10",
-			userID: "1",
+			userID: aliceSub,
 			repo:   &mockRepo{findByID: &domain.Notification{ID: "10"}},
 		},
 		{
 			name:      "invalid notification id",
 			id:        "abc",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{},
 			wantErrIs: ErrNotificationNotFound,
 		},
 		{
-			name:      "invalid user id",
+			name:      "empty user id",
 			id:        "10",
-			userID:    "0",
+			userID:    "",
 			repo:      &mockRepo{},
 			wantErrIs: ErrInvalidUserID,
 		},
 		{
 			name:      "not found returns sentinel",
 			id:        "10",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{findByID: nil},
 			wantErrIs: ErrNotificationNotFound,
 		},
 		{
 			name:      "repository error",
 			id:        "10",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{findByIDErr: errRepo},
 			wantErrIs: errRepo,
 		},
@@ -367,34 +366,34 @@ func TestMarkAsRead(t *testing.T) {
 		{
 			name:   "marked and refetched",
 			id:     "10",
-			userID: "1",
+			userID: aliceSub,
 			repo:   &mockRepo{markUpdated: true, findByID: &domain.Notification{ID: "10", Read: true}},
 		},
 		{
 			name:      "invalid notification id",
 			id:        "abc",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{},
 			wantErrIs: ErrNotificationNotFound,
 		},
 		{
-			name:      "invalid user id",
+			name:      "empty user id",
 			id:        "10",
-			userID:    "x",
+			userID:    "",
 			repo:      &mockRepo{},
 			wantErrIs: ErrInvalidUserID,
 		},
 		{
 			name:      "not updated returns not found",
 			id:        "10",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{markUpdated: false},
 			wantErrIs: ErrNotificationNotFound,
 		},
 		{
 			name:      "repository error",
 			id:        "10",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{markErr: errRepo},
 			wantErrIs: errRepo,
 		},
@@ -426,7 +425,7 @@ func TestCountUnread(t *testing.T) {
 	}{
 		{
 			name:      "valid user",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{unreadCount: 7},
 			wantCount: 7,
 		},
@@ -437,20 +436,15 @@ func TestCountUnread(t *testing.T) {
 			wantErrIs: ErrInvalidUserID,
 		},
 		{
-			name:      "non-numeric user id",
-			userID:    "abc",
-			repo:      &mockRepo{},
-			wantErrIs: ErrInvalidUserID,
-		},
-		{
-			name:      "zero user id",
-			userID:    "0",
-			repo:      &mockRepo{},
-			wantErrIs: ErrInvalidUserID,
+			// The subject is opaque (ADR-042): non-UUID, non-numeric values pass through.
+			name:      "opaque non-numeric subject accepted",
+			userID:    "service-account-checkout",
+			repo:      &mockRepo{unreadCount: 2},
+			wantCount: 2,
 		},
 		{
 			name:      "repository error",
-			userID:    "1",
+			userID:    aliceSub,
 			repo:      &mockRepo{unreadErr: errRepo},
 			wantErrIs: errRepo,
 		},
@@ -478,21 +472,21 @@ func TestMarkAllAsRead(t *testing.T) {
 
 	t.Run("valid user returns marked count", func(t *testing.T) {
 		t.Parallel()
-		got, err := NewNotificationService(&mockRepo{markAllCount: 5}).MarkAllAsRead(context.Background(), "1")
+		got, err := NewNotificationService(&mockRepo{markAllCount: 5}).MarkAllAsRead(context.Background(), aliceSub)
 		if err != nil || got != 5 {
 			t.Fatalf("MarkAllAsRead = (%d, %v), want (5, nil)", got, err)
 		}
 	})
 
-	t.Run("invalid user id is rejected", func(t *testing.T) {
+	t.Run("empty user id is rejected", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewNotificationService(&mockRepo{}).MarkAllAsRead(context.Background(), "0")
+		_, err := NewNotificationService(&mockRepo{}).MarkAllAsRead(context.Background(), "")
 		assertErrIs(t, err, ErrInvalidUserID)
 	})
 
 	t.Run("repository error propagates", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewNotificationService(&mockRepo{markAllErr: errRepo}).MarkAllAsRead(context.Background(), "1")
+		_, err := NewNotificationService(&mockRepo{markAllErr: errRepo}).MarkAllAsRead(context.Background(), aliceSub)
 		assertErrIs(t, err, errRepo)
 	})
 }
