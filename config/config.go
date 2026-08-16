@@ -92,13 +92,11 @@ type LoggingConfig struct {
 // DatabaseConfig defines PostgreSQL database configuration
 // All database connections use separate environment variables (not DATABASE_URL string)
 type DatabaseConfig struct {
-	Host string // Database host - from DB_HOST env
-	Port string // Database port - from DB_PORT env (default: "5432")
-	Name string // Database name - from DB_NAME env
-	User string // Database user - from DB_USER env
-	//nolint:gosec
-	Password string // Database password - from DB_PASSWORD env
-	//nolint:gosec
+	Host           string // Database host - from DB_HOST env
+	Port           string // Database port - from DB_PORT env (default: "5432")
+	Name           string // Database name - from DB_NAME env
+	User           string // Database user - from DB_USER env
+	Password       string // Database password - from DB_PASSWORD env
 	PasswordFile   string // Path to a file holding the password - from DB_PASSWORD_FILE env (ADR-025 pattern A; read per-connection by pkg/dbx, overrides Password)
 	SSLMode        string // SSL mode - from DB_SSLMODE env (default: "disable")
 	MaxConnections int    // Max connections - from DB_POOL_MAX_CONNECTIONS env (default: 25)

@@ -80,7 +80,10 @@ func histogramBounds(t *testing.T, reader sdkmetric.Reader, name string) []float
 			if m.Name != name {
 				continue
 			}
-			hist := m.Data.(metricdata.Histogram[float64])
+			hist, ok := m.Data.(metricdata.Histogram[float64])
+			if !ok {
+				t.Fatalf("%s is a %T, want a float64 histogram", name, m.Data)
+			}
 			if len(hist.DataPoints) == 0 {
 				t.Fatalf("%s has no data points", name)
 			}
