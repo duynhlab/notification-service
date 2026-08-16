@@ -7,7 +7,7 @@ import (
 
 	"github.com/duynhlab/notification-service/internal/core/domain"
 	logicv1 "github.com/duynhlab/notification-service/internal/logic/v1"
-	"github.com/duynhlab/notification-service/middleware"
+	"github.com/duynhlab/pkg/httpmw"
 	"github.com/duynhlab/pkg/httpx"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
@@ -37,7 +37,7 @@ func NewHandler(service *logicv1.NotificationService) *Handler {
 func (h *Handler) SendEmail(c *gin.Context) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := middleware.GetLoggerFromGinContext(c)
+	zapLogger := httpmw.LoggerFrom(c)
 
 	var req domain.SendEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -72,7 +72,7 @@ func (h *Handler) SendEmail(c *gin.Context) {
 func (h *Handler) SendSMS(c *gin.Context) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := middleware.GetLoggerFromGinContext(c)
+	zapLogger := httpmw.LoggerFrom(c)
 
 	var req domain.SendSMSRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -100,7 +100,7 @@ func (h *Handler) SendSMS(c *gin.Context) {
 func (h *Handler) ListNotifications(c *gin.Context) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := middleware.GetLoggerFromGinContext(c)
+	zapLogger := httpmw.LoggerFrom(c)
 
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
@@ -133,7 +133,7 @@ func (h *Handler) handleNotificationByID(
 ) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := middleware.GetLoggerFromGinContext(c)
+	zapLogger := httpmw.LoggerFrom(c)
 
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
@@ -182,7 +182,7 @@ func (h *Handler) MarkAsRead(c *gin.Context) {
 func (h *Handler) respondUserScopedCount(c *gin.Context, resultKey, errLog, okLog string, action func(context.Context, string) (int, error)) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := middleware.GetLoggerFromGinContext(c)
+	zapLogger := httpmw.LoggerFrom(c)
 
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")

@@ -9,10 +9,16 @@ import (
 	"time"
 
 	"github.com/duynhlab/notification-service/internal/core/domain"
-	"github.com/duynhlab/notification-service/middleware"
+	"github.com/duynhlab/pkg/obsx"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// tracerScope is the OpenTelemetry instrumentation scope for this package's
+// spans: it names the CODE that creates them, which is why it is a package path
+// and not the service name. Deployment identity travels separately as
+// service.name on the Resource.
+const tracerScope = "github.com/duynhlab/notification-service/internal/logic/v1"
 
 type NotificationService struct {
 	repo domain.NotificationRepository
@@ -25,7 +31,7 @@ func NewNotificationService(repo domain.NotificationRepository) *NotificationSer
 }
 
 func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmailRequest) (*domain.Notification, error) {
-	ctx, span := middleware.StartSpan(ctx, "notification.email", trace.WithAttributes(
+	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.email", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("to", req.To),
 	))
@@ -78,7 +84,7 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 }
 
 func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSRequest) (*domain.Notification, error) {
-	ctx, span := middleware.StartSpan(ctx, "notification.sms", trace.WithAttributes(
+	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.sms", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("to", req.To),
 	))
@@ -116,7 +122,7 @@ func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSReq
 
 // ListNotifications returns all notifications for a user
 func (s *NotificationService) ListNotifications(ctx context.Context, userID string, limit, offset int) ([]domain.Notification, int, error) {
-	ctx, span := middleware.StartSpan(ctx, "notification.list", trace.WithAttributes(
+	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.list", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("user_id", userID),
@@ -151,7 +157,7 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 
 // GetNotification retrieves a single notification by ID, scoped to the owning user.
 func (s *NotificationService) GetNotification(ctx context.Context, id, userID string) (*domain.Notification, error) {
-	ctx, span := middleware.StartSpan(ctx, "notification.get", trace.WithAttributes(
+	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.get", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("notification.id", id),
@@ -189,7 +195,7 @@ func (s *NotificationService) GetNotification(ctx context.Context, id, userID st
 
 // MarkAsRead marks a notification as read, scoped to the owning user.
 func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string) (*domain.Notification, error) {
-	ctx, span := middleware.StartSpan(ctx, "notification.mark_read", trace.WithAttributes(
+	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.mark_read", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("notification.id", id),
@@ -230,7 +236,7 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 // an integer (unread count, rows marked, …). Shared by the count-style methods so
 // the validation + tracing live in one place.
 func (s *NotificationService) userScopedCount(ctx context.Context, userID, spanName string, action func(context.Context, string) (int, error)) (int, error) {
-	ctx, span := middleware.StartSpan(ctx, spanName, trace.WithAttributes(
+	ctx, span := obsx.StartSpan(ctx, tracerScope, spanName, trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("user_id", userID),

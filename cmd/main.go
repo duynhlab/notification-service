@@ -30,9 +30,9 @@ import (
 	grpcv1 "github.com/duynhlab/notification-service/internal/grpc/v1"
 	logicv1 "github.com/duynhlab/notification-service/internal/logic/v1"
 	webv1 "github.com/duynhlab/notification-service/internal/web/v1"
-	"github.com/duynhlab/notification-service/middleware"
 	"github.com/duynhlab/pkg/authmw"
 	"github.com/duynhlab/pkg/grpcx"
+	"github.com/duynhlab/pkg/httpmw"
 	"github.com/duynhlab/pkg/logger/zapx"
 	"github.com/duynhlab/pkg/migratex"
 	"github.com/duynhlab/pkg/obsx"
@@ -74,7 +74,6 @@ func main() {
 	// reflect the values obsx actually uses. Runs before grpcx.NewServer so
 	// the otelgrpc handlers pick up the global MeterProvider.
 	otelCfg := obsx.ConfigFromEnv()
-	middleware.SetServiceName(otelCfg.ServiceName)
 	var tp interface{ Shutdown(context.Context) error }
 	obs, err := obsx.SetupObservability(context.Background(), otelCfg)
 	if err != nil {
@@ -142,7 +141,7 @@ func main() {
 	grpcSrv := startGRPC(cfg, logger, service)
 
 	var isShuttingDown atomic.Bool
-	srv := setupServer(cfg, logger, &isShuttingDown, handler, verifier, pool)
+	srv := setupServer(cfg, obsx.ConfigFromEnv().ServiceName, logger, &isShuttingDown, handler, verifier, pool)
 	runGracefulShutdown(cfg, srv, grpcSrv, tp, pool, logger, &isShuttingDown)
 }
 
@@ -248,6 +247,7 @@ func startGRPC(cfg *config.Config, logger *zap.Logger, svc *logicv1.Notification
 
 func setupServer(
 	cfg *config.Config,
+	otelServiceName string,
 	logger *zap.Logger,
 	isShuttingDown *atomic.Bool,
 	handler *webv1.Handler,
@@ -258,8 +258,8 @@ func setupServer(
 ) *http.Server {
 	r := gin.Default()
 
-	r.Use(middleware.TracingMiddleware())
-	r.Use(middleware.LoggingMiddleware(logger))
+	r.Use(httpmw.Tracing(otelServiceName))
+	r.Use(httpmw.Logging(logger))
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
