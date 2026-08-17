@@ -109,7 +109,7 @@ func TestListNotifications_Success(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := decode(t, rec)
-	if body["total_items"].(float64) != 2 {
+	if total, ok := body["total_items"].(float64); !ok || total != 2 {
 		t.Errorf("total_items = %v, want 2", body["total_items"])
 	}
 	if items, ok := body["items"].([]any); !ok || len(items) != 2 {
@@ -150,7 +150,8 @@ func TestGetUnreadCount_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if body := decode(t, rec); body["count"].(float64) != 7 {
+	body := decode(t, rec)
+	if count, ok := body["count"].(float64); !ok || count != 7 {
 		t.Errorf("count = %v, want 7", body["count"])
 	}
 }
@@ -243,7 +244,8 @@ func TestMarkAllAsRead_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if body := decode(t, rec); body["updated"].(float64) != 5 {
+	body := decode(t, rec)
+	if updated, ok := body["updated"].(float64); !ok || updated != 5 {
 		t.Errorf("updated = %v, want 5", body["updated"])
 	}
 }
