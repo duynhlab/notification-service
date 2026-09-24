@@ -27,7 +27,8 @@ var (
 	meter = otel.Meter("notification-service")
 
 	readCounter, _ = meter.Int64Counter("notification.read.total",
-		metric.WithDescription("Notifications marked read, split by single vs bulk mark-all"))
+		metric.WithDescription("Notifications marked read, split by single vs bulk mark-all"),
+		metric.WithUnit("{request}"))
 	// Advisory second-scale buckets: obsx installs its DurationBuckets View only
 	// for the semconv HTTP/RPC instruments by name, so this custom histogram
 	// would otherwise fall back to the SDK default explicit buckets ({0,5,…,10000},
