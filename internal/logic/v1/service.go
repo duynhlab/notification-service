@@ -33,7 +33,6 @@ func NewNotificationService(repo domain.NotificationRepository) *NotificationSer
 func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmailRequest) (*domain.Notification, error) {
 	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.email", trace.WithAttributes(
 		attribute.String("layer", "logic"),
-		attribute.String("to", req.To),
 	))
 	defer span.End()
 
@@ -86,7 +85,6 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSRequest) (*domain.Notification, error) {
 	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.sms", trace.WithAttributes(
 		attribute.String("layer", "logic"),
-		attribute.String("to", req.To),
 	))
 	defer span.End()
 
