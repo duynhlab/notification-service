@@ -3,16 +3,16 @@ package v1
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/duynhlab/notification-service/internal/core/domain"
 	logicv1 "github.com/duynhlab/notification-service/internal/logic/v1"
-	"github.com/duynhlab/pkg/httpmw"
 	"github.com/duynhlab/pkg/httpx"
+	"github.com/duynhlab/pkg/logger/slogx"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 )
 
 const (
@@ -37,13 +37,11 @@ func NewHandler(service *logicv1.NotificationService) *Handler {
 func (h *Handler) SendEmail(c *gin.Context) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := httpmw.LoggerFrom(c)
-
 	var req domain.SendEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		span.SetAttributes(attribute.Bool("request.valid", false))
 		span.RecordError(err)
-		zapLogger.Error("Invalid request", zap.Error(err))
+		slogx.FromContext(ctx).Warn(ctx, "Invalid request", slogx.Err(err))
 		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidation, "invalid request body")
 		return
 	}
@@ -52,7 +50,7 @@ func (h *Handler) SendEmail(c *gin.Context) {
 	notification, err := h.service.SendEmail(ctx, req)
 	if err != nil {
 		span.RecordError(err)
-		zapLogger.Error("Failed to send email", zap.Error(err))
+		slogx.FromContext(ctx).Error(ctx, "Failed to send email", slogx.Err(err))
 
 		switch {
 		case errors.Is(err, logicv1.ErrInvalidRecipient):
@@ -65,20 +63,18 @@ func (h *Handler) SendEmail(c *gin.Context) {
 		return
 	}
 
-	zapLogger.Info("Email sent", zap.String("notification_id", notification.ID))
+	slogx.FromContext(ctx).Info(ctx, "Email sent", slog.String("notification.id", notification.ID))
 	c.JSON(http.StatusOK, notification)
 }
 
 func (h *Handler) SendSMS(c *gin.Context) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := httpmw.LoggerFrom(c)
-
 	var req domain.SendSMSRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		span.SetAttributes(attribute.Bool("request.valid", false))
 		span.RecordError(err)
-		zapLogger.Error("Invalid request", zap.Error(err))
+		slogx.FromContext(ctx).Warn(ctx, "Invalid request", slogx.Err(err))
 		httpx.RespondError(c, http.StatusBadRequest, httpx.CodeValidation, "invalid request body")
 		return
 	}
@@ -87,12 +83,12 @@ func (h *Handler) SendSMS(c *gin.Context) {
 	notification, err := h.service.SendSMS(ctx, req)
 	if err != nil {
 		span.RecordError(err)
-		zapLogger.Error("Failed to send SMS", zap.Error(err))
+		slogx.FromContext(ctx).Error(ctx, "Failed to send SMS", slogx.Err(err))
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		return
 	}
 
-	zapLogger.Info("SMS sent", zap.String("notification_id", notification.ID))
+	slogx.FromContext(ctx).Info(ctx, "SMS sent", slog.String("notification.id", notification.ID))
 	c.JSON(http.StatusOK, notification)
 }
 
@@ -100,13 +96,11 @@ func (h *Handler) SendSMS(c *gin.Context) {
 func (h *Handler) ListNotifications(c *gin.Context) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := httpmw.LoggerFrom(c)
-
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
 		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
-		zapLogger.Warn(logMsgMissingUserID)
+		slogx.FromContext(ctx).Warn(ctx, logMsgMissingUserID)
 		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthorized, errAuthRequired)
 		return
 	}
@@ -115,12 +109,12 @@ func (h *Handler) ListNotifications(c *gin.Context) {
 	notifications, total, err := h.service.ListNotifications(ctx, userID, pageSize, httpx.Offset(page, pageSize))
 	if err != nil {
 		span.RecordError(err)
-		zapLogger.Error("Failed to list notifications", zap.Error(err))
+		slogx.FromContext(ctx).Error(ctx, "Failed to list notifications", slogx.Err(err))
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		return
 	}
 
-	zapLogger.Info("Notifications listed", zap.Int("count", len(notifications)))
+	slogx.FromContext(ctx).Info(ctx, "Notifications listed", slog.Int("count", len(notifications)))
 	c.JSON(http.StatusOK, httpx.NewPaginated(notifications, page, pageSize, total))
 }
 
@@ -133,13 +127,11 @@ func (h *Handler) handleNotificationByID(
 ) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := httpmw.LoggerFrom(c)
-
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
 		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
-		zapLogger.Warn(logMsgMissingUserID)
+		slogx.FromContext(ctx).Warn(ctx, logMsgMissingUserID)
 		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthorized, errAuthRequired)
 		return
 	}
@@ -150,7 +142,7 @@ func (h *Handler) handleNotificationByID(
 	notification, err := action(ctx, id, userID)
 	if err != nil {
 		span.RecordError(err)
-		zapLogger.Error(successLog+" failed", zap.Error(err))
+		slogx.FromContext(ctx).Error(ctx, successLog+" failed", slogx.Err(err))
 
 		switch {
 		case errors.Is(err, logicv1.ErrNotificationNotFound):
@@ -161,7 +153,7 @@ func (h *Handler) handleNotificationByID(
 		return
 	}
 
-	zapLogger.Info(successLog, zap.String("notification_id", id))
+	slogx.FromContext(ctx).Info(ctx, successLog, slog.String("notification.id", id))
 	c.JSON(http.StatusOK, notification)
 }
 
@@ -182,13 +174,11 @@ func (h *Handler) MarkAsRead(c *gin.Context) {
 func (h *Handler) respondUserScopedCount(c *gin.Context, resultKey, errLog, okLog string, action func(context.Context, string) (int, error)) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	zapLogger := httpmw.LoggerFrom(c)
-
 	// Security: Require valid user_id from auth middleware
 	userID := c.GetString("user_id")
 	if userID == "" {
 		span.SetAttributes(attribute.Bool(attrAuthMissing, true))
-		zapLogger.Warn(logMsgMissingUserID)
+		slogx.FromContext(ctx).Warn(ctx, logMsgMissingUserID)
 		httpx.RespondError(c, http.StatusUnauthorized, httpx.CodeUnauthorized, errAuthRequired)
 		return
 	}
@@ -196,12 +186,12 @@ func (h *Handler) respondUserScopedCount(c *gin.Context, resultKey, errLog, okLo
 	n, err := action(ctx, userID)
 	if err != nil {
 		span.RecordError(err)
-		zapLogger.Error(errLog, zap.Error(err))
+		slogx.FromContext(ctx).Error(ctx, errLog, slogx.Err(err))
 		httpx.RespondError(c, http.StatusInternalServerError, httpx.CodeInternal, errInternal)
 		return
 	}
 
-	zapLogger.Info(okLog, zap.Int(resultKey, n))
+	slogx.FromContext(ctx).Info(ctx, okLog, slog.Int(resultKey, n))
 	c.JSON(http.StatusOK, gin.H{resultKey: n})
 }
 
