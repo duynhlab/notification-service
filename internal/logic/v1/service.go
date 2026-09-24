@@ -42,7 +42,7 @@ func (s *NotificationService) SendEmail(ctx context.Context, req domain.SendEmai
 	// bad request, not a send, so it is left out of the send-latency histogram.
 	if _, err := mail.ParseAddress(req.To); err != nil {
 		span.SetAttributes(attribute.Bool("email.sent", false))
-		return nil, fmt.Errorf("send email to %q: %w", req.To, ErrInvalidRecipient)
+		return nil, fmt.Errorf("send email: %w", ErrInvalidRecipient)
 	}
 
 	start := time.Now()
@@ -95,7 +95,7 @@ func (s *NotificationService) SendSMS(ctx context.Context, req domain.SendSMSReq
 	// bad request, not a send, so it is left out of the send-latency histogram.
 	if strings.TrimSpace(req.To) == "" {
 		span.SetAttributes(attribute.Bool("sms.sent", false))
-		return nil, fmt.Errorf("send sms to %q: %w", req.To, ErrInvalidRecipient)
+		return nil, fmt.Errorf("send sms: %w", ErrInvalidRecipient)
 	}
 
 	start := time.Now()
@@ -168,7 +168,7 @@ func (s *NotificationService) GetNotification(ctx context.Context, id, userID st
 	notificationID, err := strconv.Atoi(id)
 	if err != nil {
 		span.SetAttributes(attribute.Bool("notification.found", false))
-		return nil, fmt.Errorf("invalid notification id %q: %w", id, ErrNotificationNotFound)
+		return nil, fmt.Errorf("invalid notification id: %w", ErrNotificationNotFound)
 	}
 
 	// userID is the OIDC token subject — opaque, so only emptiness is invalid.
@@ -205,7 +205,7 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 
 	notificationID, err := strconv.Atoi(id)
 	if err != nil {
-		return nil, fmt.Errorf("invalid notification id %q: %w", id, ErrNotificationNotFound)
+		return nil, fmt.Errorf("invalid notification id: %w", ErrNotificationNotFound)
 	}
 
 	// userID is the OIDC token subject — opaque, so only emptiness is invalid.
