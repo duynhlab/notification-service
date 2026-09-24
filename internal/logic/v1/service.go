@@ -125,7 +125,6 @@ func (s *NotificationService) ListNotifications(ctx context.Context, userID stri
 	ctx, span := obsx.StartSpan(ctx, tracerScope, "notification.list", trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
-		attribute.String("user_id", userID),
 	))
 	defer span.End()
 
@@ -161,7 +160,6 @@ func (s *NotificationService) GetNotification(ctx context.Context, id, userID st
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("notification.id", id),
-		attribute.String("user_id", userID),
 	))
 	defer span.End()
 
@@ -199,7 +197,6 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id, userID string)
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
 		attribute.String("notification.id", id),
-		attribute.String("user_id", userID),
 	))
 	defer span.End()
 
@@ -239,7 +236,6 @@ func (s *NotificationService) userScopedCount(ctx context.Context, userID, spanN
 	ctx, span := obsx.StartSpan(ctx, tracerScope, spanName, trace.WithAttributes(
 		attribute.String("layer", "logic"),
 		attribute.String("api.version", "v1"),
-		attribute.String("user_id", userID),
 	))
 	defer span.End()
 
