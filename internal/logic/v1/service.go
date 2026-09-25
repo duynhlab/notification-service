@@ -249,7 +249,7 @@ func (s *NotificationService) userScopedCount(ctx context.Context, userID, spanN
 		return 0, err
 	}
 
-	span.SetAttributes(attribute.Int("result.count", n))
+	span.SetAttributes(attribute.Int("notifications.affected", n))
 	return n, nil
 }
 
