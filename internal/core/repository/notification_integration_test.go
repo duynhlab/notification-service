@@ -17,27 +17,24 @@ import (
 	"sort"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/duynhlab/notification-service/internal/core/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func newTestDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
 
-	container, err := postgres.Run(ctx, "postgres:16-alpine",
+	container, err := postgres.Run(ctx, "postgres:18-alpine",
 		postgres.WithDatabase("notification"),
 		postgres.WithUsername("notification"),
 		postgres.WithPassword("secret"),
-		testcontainers.WithWaitStrategy(
-			wait.ForListeningPort("5432/tcp").WithStartupTimeout(90*time.Second),
-		),
+		// Ready twice (initdb restarts the server once), then the published
+		// port: the module's own strategy, so a test never races the restart.
+		postgres.BasicWaitStrategies(),
 	)
 	if err != nil {
 		t.Fatalf("start postgres container: %v", err)
