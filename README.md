@@ -16,7 +16,7 @@ east-west entry points that create them.
 
 | Area | Technology |
 |------|------------|
-| Runtime | Go 1.26 |
+| Runtime | Go 1.27 |
 | Transports | HTTP (private inbox, internal create) · gRPC (east-west send) |
 | Data | PostgreSQL — one table, `notifications` |
 | Platform libraries | `authmw`, `dbx`, `grpcx`, `httpx`, `logger/zapx`, `migratex`, `obsx`, `proto` |
