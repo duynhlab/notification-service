@@ -46,7 +46,7 @@ These are the commands CI runs, so a green local run means a green pipeline.
 go build ./...
 go vet ./...
 go test -race ./...
-go test -tags=integration ./internal/core/repository/...   # needs Docker (testcontainers)
+go test -tags=integration ./internal/core/repository/... ./db/seed/...   # needs Docker (testcontainers)
 golangci-lint run
 ```
 
@@ -119,6 +119,26 @@ Rules an implementer can violate at the keyboard.
 - **Pooler-safe database settings live in `pkg/dbx`.** The one local exception is
   the seed path, which sets simple protocol itself because it runs multi-statement
   files in a single exec.
+- **Two identities, one DSN builder** (homelab RFC-0029). The app logs in as
+  `notification_runtime`, which has CRUD on `notifications` and owns nothing; its
+  password is rotated by OpenBAO and read from `DB_PASSWORD_FILE` on every new
+  connection (`dbx.WithPasswordFile`). `migrate` and `seed` log in as
+  `notification_migrator` with a static password in `DB_PASSWORD` (they build
+  the DSN with `BuildDSN()` and never read the file) and switch to
+  `notification_owner` with `SET ROLE` (`DB_MIGRATION_ROLE`;
+  `migratex.WithSetRole` and the seed pool's `AfterConnect`). An empty role fails
+  the run; never add a fallback to the login's own identity, or objects end up
+  owned by the migrator.
+- **A new table needs no GRANT.** `000003_authorization` sets the owner's
+  default privileges, so every table and sequence a later migration creates is
+  usable by `notification_runtime`. It names `notification_runtime` on purpose:
+  the platform creates the roles before migrations run, and a missing role must
+  fail. A function the runtime calls directly is the exception: PUBLIC has no
+  EXECUTE by default, so that migration grants EXECUTE explicitly.
+- **The platform owns the roles and the database owner.** `notification_owner`
+  must own the `notification` database (on PostgreSQL 15+ that is what gives it
+  CREATE on `public`), and `migrate`/`seed` must connect to the primary
+  directly: `SET ROLE` is session state that a transaction pooler would not keep.
 - **`seed` is development-only** and refuses production. It is invoked explicitly
   — never from `migrate` or the serve path — and must not share the
   `schema_migrations` version table.
