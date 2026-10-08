@@ -38,12 +38,22 @@ change when they change.
 Prefer the homelab **local-stack** — the inbox needs a signed token, and the
 interesting traffic arrives from the order workflow.
 
-Standalone you need PostgreSQL reachable through the `DB_*` variables:
+Standalone you need PostgreSQL reachable through the `DB_*` variables and three
+roles: `notification_owner` (owns the schema, cannot log in),
+`notification_migrator` (logs in, may only `SET ROLE notification_owner`) and
+`notification_runtime` (serves traffic, CRUD only). `migrate` and `seed` log in
+as the migrator with its password in `DB_PASSWORD` and need
+`DB_MIGRATION_ROLE=notification_owner`; they refuse to run without it, and they
+must reach PostgreSQL directly, not through a transaction pooler. The app logs in
+as `notification_runtime`; when `DB_PASSWORD_FILE` is set it reads the password
+from that file on every new connection, so a rotated password needs no restart.
+`notification_owner` must own the `notification` database: on PostgreSQL 15+
+that is what lets it create objects in the `public` schema.
 
 ```bash
-go run cmd/main.go migrate   # apply schema migrations
-go run cmd/main.go seed      # demo notifications — development only, refuses production
-go run cmd/main.go           # serve HTTP :8080 + gRPC :9090
+DB_USER=notification_migrator DB_MIGRATION_ROLE=notification_owner go run cmd/main.go migrate
+DB_USER=notification_migrator DB_MIGRATION_ROLE=notification_owner go run cmd/main.go seed   # development only
+DB_USER=notification_runtime go run cmd/main.go   # serve HTTP :8080 + gRPC :9090
 ```
 
 ## Verify
@@ -53,7 +63,7 @@ The commands CI runs, so a green local run means a green pipeline:
 ```bash
 go build ./...
 go test -race ./...
-go test -tags=integration ./internal/core/repository/...   # needs Docker (testcontainers)
+go test -tags=integration ./internal/core/repository/... ./db/seed/...   # needs Docker (testcontainers)
 golangci-lint run
 ```
 
